@@ -1,0 +1,35 @@
+PROXYSENDER
+
+0) Inizializza le seguenti strutture:
+
+  - Lista dei pacchetti da inviare
+  - Id dell'ultimo pacchetto creato
+  - Porta da usare verso il ritardatore (61000-61002)
+
+1) Apri socket TCP in ricezione (a cui si collegherà il sender) su porta 59000 e socket UDP in ascolto su porta 60000
+
+  # Formare coda di messaggi
+
+2) Leggi LEN byte e inseriscili come payload di un pacchetto body (il resto è padding) dando a quest'ultimo l'id disponibile (incrementandolo successivamente)
+
+3) Inserisci il pacchetto cosi creato nella lista dei pacchetti da inviare
+
+4) Torna al punto 2 fino a creare N pacchetti nella lista
+  
+  # Invia i messaggi
+
+  Utilizzare una sola porta per ogni "sessione" di invio dei datagram è inefficiente. Distinguiamo 3 casi:
+  
+  Caso 1) Una sola delle tre porte è in BURST. Il caso peggiore è che tutti i pacchetti inviati su quella porta siano persi, il caso peggiore inviando ogni pacchetto su una porta differente è invece che 1/3 dei pacchetti è perso.
+  
+  Caso 2) Due delle tre porte sono in BURST. Idem: nella prima ipotesi abbiamo tutti i pacchetti persi, nella seconda solo 2/3!
+  
+  Caso 3) Tutte le porte sono in BURST. I due metodi sono equivalenti.
+  
+5) Invia i pacchetti in lista ognuno su una differente porta del ritardatore ciclando su di esse
+
+6) Leggi il socket UDP per eventuali ACK. Per ogni ACK letto (totale di 8 byte: ID dell'ACK, tipo (B), ID del pacchetto da ACK) scorri la lista dei pacchetti da inviare e rimuovi quello ACK'd
+
+7) Ricomincia tutto dal punto 2
+
+NOTA: Chiaramente tutti passi suddetti sono da effettuare durante un ciclo di select. L'ordine dei passi è indifferente poiché sono tutte operazioni indipendenti tra loro (e difatti la select potrebbe ritornare per uno qualsiasi dei socket coinvolti).
