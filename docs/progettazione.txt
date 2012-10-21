@@ -1,0 +1,39 @@
+Analisi dei requisiti
+---------------------
+
+- Il PS riceve un flusso di dati TCP dal S e lo seziona in pacchetti UDP
+da mandare al R sulla prima porta che trova operativa (non BURST).
+
+- 
+
+Progettazione
+-------------
+PKT_SIZE = 65535-192-5 = max_total_size_IP_pkt - max_IP_headers - my_headers = 65338
+
+PROXYSENDER:
+
+Il PS mantiene un buffer circolare di MAX_NOACK elementi. Ogni volta che
+riceve un pacchetto dal sender ne bufferizza una copia. Quando il buffer
+è pieno procede all'invio: quando viene inviato uno dei pacchetti 
+bufferizzati LPS viene incrementato. Quando viene ricevuto un ACK increm
+LAP e legge un nuovo pacchetto dal sender (fino a EOF) bufferizzandolo
+in posizione LAP-1. Chiaramente l'invio dei pacchetti avviene tramite 
+UDP.
+
+- Fasi principali:
+	1) Leggi PKT_SIZE byte dal socket in ricezione associato al Sender.
+	2) Scrivi sul socket in invio PKT_SIZE byte.
+	3) Mettiti in attesa sul socket in ricezione dal R (3 casi) e ricomincia dal punto 1.
+
+- Quando il PS invia un pacchetto ci sono tre possibili casi:
+	1) Riceve un pacchetto ICMP = bisogna rimandare il pacchetto perché
+		il ritardatore lo ha perso cambiando porta.
+	2) Riceve un pacchetto di acknowledgement = pacchetto correttamente
+		ricevuto, passiamo al prossimo.
+	3) Attende un timeout prestabilito. Se nessun pacchetto di ack è rcv
+		in quel periodo di tempo il pacchetto originale viene rispedito.
+		
+PROXYRECEIVER:
+
+- Quando il PR riceve un pacchetto rimanda indietro un ack e invia il pkt
+appena ricevuto al R.
