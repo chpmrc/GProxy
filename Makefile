@@ -1,6 +1,7 @@
 BIN_DIR=bin
-SEN_DIR=src/psender
-REC_DIR=src/preceiver
+SEN_DIR=src/
+REC_DIR=src/
+UTILS_DIR=src/
 RIT_DIR=src/ritardatore
 GCCFLAGS= -ansi -Wall -Wunused -pedantic -ggdb
 LINKERFLAGS=-lpthread -lm
