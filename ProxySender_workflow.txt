@@ -1,4 +1,5 @@
 PROXYSENDER
+----------------------
 
 0) Inizializza le seguenti strutture:
 
