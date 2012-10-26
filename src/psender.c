@@ -1,7 +1,3 @@
-/** TODO:
-	1) Aprire socket UDP e leggere il contenuto inviando un ACK
-*/
-
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -9,42 +5,87 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <string.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include "include/globalUtils.h"
 
-#ifndef __USE_MISC
-	#define __USE_MISC /* Avoid warnings on the non standard inet_aton */
-#endif	
-#define TRUE 1
-#define FALSE 0
-
-struct sockaddr_in to, from; /* Indirizzo del socket locale e del ritardatore */ 
-int ritardatore; /* socket descriptor verso/da il ritardatore */
+struct sockaddr_in to, from, source, sourceClient; /* Indirizzo del socket locale e remoto del ritardatore e del sender */ 
+int ritardatore, sender, connectedSender; /* socket descriptor verso/da il ritardatore e dal sender */
 char toAddress[] = "127.0.0.1";
+char sourceAddress[] = "0.0.0.0";
+char fromAddress[] = "0.0.0.0"; /* INADDR_ANY */
 
 /* UTILS */
-char recvBuffer[1000];
+char recvBuffer[1000], sendBuffer[1000];
 int trueOpt = 1;
-int readCounter;
+int sharedError; /* Variabile di riconoscimento errori condivisa, serve per quelle funzioni che non ritornano interi */
+int readCounter, sentCounter;
 socklen_t toLen = sizeof(to);
+socklen_t sourceClientLen = sizeof(sourceClient);
+
 
 int main(){
+	/* INIT */
+	
 	/* Creo il socket descriptor per il ritardatore e ne setto le specifiche opzioni */
-	ritardatore = socket(AF_INET, SOCK_DGRAM, 0);
-	setsockopt(ritardatore, SOL_SOCKET, SO_REUSEADDR, (int *)trueOpt, sizeof(trueOpt));
+	if ((ritardatore = getSocket(SOCK_DGRAM)) == SOCKERROR){
+		printError("[ERROR] creazione fallita per il socket da/verso il ritardatore! Errore");
+	}
+	printf("rit desc : %d\n", ritardatore);
+	printLog("socket da/verso il ritardatore correttamente creato!");
+	/* Creo il socket descriptor per la sorgente/sender */
+	if ((sender = getSocket(SOCK_STREAM)) == SOCKERROR){
+		printError("[ERROR] creazione fallita per il socket dal sender! Errore");
+	}
+	printLog("socket dal sender correttamente creato!");
+	printf("senderDesc : %d\n", sender);
+	
+	/* Inizializzo la struttura per il socket in ricezione dal sender/sorgente */
+	source = getSocketAddress(sourceAddress, 59000);
+	if (sharedError){
+		printError("[ERROR] creazione dell'indirizzo associato al socket dal sender fallita! Errore");
+	}
+	printLog("indirizzo associato al socket dal sender correttamente creato!");
 	/* Inizializzo la struttura per il socket in ricezione dal ritardatore */
-	memset(&from, 0, sizeof(from));
-	from.sin_family = AF_INET;
-	from.sin_addr.s_addr = htonl(INADDR_ANY);
-	from.sin_port = htons(60000);
+	from = getSocketAddress(fromAddress, 60000);
+	if (sharedError){
+		printError("[ERROR] creazione dell'indirizzo associato al socket dal ritardatore fallita! Errore");
+	}
+	printLog("indirizzo associato al socket dal ritardatore correttamente creato!");
 	/* Inizializzo la struttura per il socket in invio verso il ritardatore */
-	memset(&to, 0, sizeof(to));
-	to.sin_family = AF_INET;
-	inet_aton(toAddress, &to.sin_addr);
-	to.sin_port = htons(61000);	
-	/* Lego il socket ad un indirizzo in ricezione */
+	to = getSocketAddress(toAddress, 61000);
+	if (sharedError){
+		printError("[ERROR] creazione dell'indirizzo associato al socket verso il ritardatore fallita! Errore");
+	}
+	printLog("indirizzo associato al socket verso il ritardatore correttamente creato!");
+	
+	/* BINDS AND LISTENS */
+	
+	/* Lego il socket dal ritardatore ad un indirizzo in ricezione */
 	bind(ritardatore, (struct sockaddr *)&from, sizeof(from));
+	/* Lego il socket dal sender ad un indirizzo in ricezione */
+	bind(sender, (struct sockaddr *)&source, sizeof(source));
+	listen(sender, 1);
+	
 	/* Leggo i datagram */
 	while(TRUE){
-		readCounter = recv(ritardatore, recvBuffer, 1000, 0);
+		/* RICEZIONE TCP */
+		
+		connectedSender = accept(sender, (struct sockaddr *)&sourceClient, &sourceClientLen);
+		printf("accepted!\n");
+		readCounter = recv(connectedSender, recvBuffer, 1000, 0);
+		printf("reading!\n");
+		printf("[MGS_TCP]: %s", recvBuffer);
+		exit(0);
+		memset(recvBuffer, 0, strlen(recvBuffer));
+		sleep(3);
+		/* INVIO */
+		sprintf(sendBuffer, "[MSG] Ciao\n");
+		sentCounter = sendto(ritardatore, sendBuffer, strlen(sendBuffer)+1, 0, (struct sockaddr *)&to, sizeof(to));
+		/* RICEZIONE */
+		sleep(3);
+		readCounter = recv(ritardatore, recvBuffer, 1000, MSG_DONTWAIT);
 		printf("[MSG]: %s", recvBuffer);
+		memset(recvBuffer, 0, strlen(recvBuffer));
 	}
 }
