@@ -82,8 +82,13 @@ void logAppend(char* string){
  * al valore di errno.
  */
 void printError(char *message){
-	char msg[1000];
-	sprintf(msg, "%s%s\n", "[ERROR] ", message);
+	char msg[500];
+	char errstr[200];
+	sprintf(errstr, "%s", strerror(errno));
+	if (errno == 0){
+		sprintf(errstr, "%s", "This was not an OS related error so no errno value was set!");
+	}
+	sprintf(msg, "%s%s\n\t%s\n", "[ERROR] ", message, errstr);
 	printf("%s", msg);
 	logAppend(msg);
 	exit(1);
