@@ -7,12 +7,19 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <time.h>
+
 
 #define TRUE 1
 #define FALSE 0
 #define SOCKERROR -1
 
 int sharedError; /* errno-like variable */
+char *logFilePath = "./log.txt"; /* Log is also saved to a file */
+int firstExecution = TRUE; /* At the beginning do something, then something else */
 
 /**
  * @param {int} type
@@ -52,19 +59,33 @@ struct sockaddr_in getSocketAddress(char *address, unsigned short int port){
 }
 
 /**
+ * @param {char *} filePath The path to the log file
+ */
+void logAppend(char* string){
+	FILE *debug = fopen(logFilePath, "a+");
+	if (firstExecution){
+		char currentDate[1000];
+		time_t instant = time(NULL);
+		/* Viene sempre usata la stessa locazione di memoria ma non ci interessa */
+		strftime(currentDate, 1000, "%d/%m/%y - %H:%M:%S", localtime(&instant));
+		firstExecution = FALSE;
+		fprintf(debug, "%s%s%s", "\n\n==================  ", currentDate ," ==================\n\n");
+	}
+	fprintf(debug, "%s", string);
+	fclose(debug);
+}
+
+/**
  * @param {char *} message
  * Questa funzione stampa un messaggio di errore e termina l'esecuzione
  * sfruttando la funzione perror per stampare anche il messaggio relativo
  * al valore di errno.
  */
 void printError(char *message){
-	char msg[1000] = "[ERROR] ";
-	if (strlen(message) > 1000){
-		printf("[ERROR] overflow con strcat durante la creazione di un messaggio di errore!");
-		exit(2);
-	}
-	strcat(msg, message);
-	printError(msg);
+	char msg[1000];
+	sprintf(msg, "%s%s\n", "[ERROR] ", message);
+	printf("%s", msg);
+	logAppend(msg);
 	exit(1);
 }
 
@@ -73,5 +94,8 @@ void printError(char *message){
  * Questa funzione stampa un messaggio di log sullo stdout.
  */
 void printLog(char *message){
-	printf("[LOG] %s\n", message);
+	char msg[1000];
+	sprintf(msg, "%s%s\n", "[LOG] ", message);
+	printf("%s", msg);
+	logAppend(msg);
 }

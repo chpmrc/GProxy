@@ -23,39 +23,39 @@ int readCounter, sentCounter;
 socklen_t toLen = sizeof(to);
 socklen_t sourceClientLen = sizeof(sourceClient);
 
-
 int main(){
 	/* INIT */
 	
+	/* Cambia il path del file di log */
+	logFilePath = "./psenderLog.txt";
+	
 	/* Creo il socket descriptor per il ritardatore e ne setto le specifiche opzioni */
 	if ((ritardatore = getSocket(SOCK_DGRAM)) == SOCKERROR){
-		printError("[ERROR] creazione fallita per il socket da/verso il ritardatore! Errore");
+		printError("creazione fallita per il socket da/verso il ritardatore! Errore");
 	}
-	printf("rit desc : %d\n", ritardatore);
 	printLog("socket da/verso il ritardatore correttamente creato!");
 	/* Creo il socket descriptor per la sorgente/sender */
 	if ((sender = getSocket(SOCK_STREAM)) == SOCKERROR){
-		printError("[ERROR] creazione fallita per il socket dal sender! Errore");
+		printError("creazione fallita per il socket dal sender! Errore");
 	}
 	printLog("socket dal sender correttamente creato!");
-	printf("senderDesc : %d\n", sender);
-	
+		
 	/* Inizializzo la struttura per il socket in ricezione dal sender/sorgente */
 	source = getSocketAddress(sourceAddress, 59000);
 	if (sharedError){
-		printError("[ERROR] creazione dell'indirizzo associato al socket dal sender fallita! Errore");
+		printError("creazione dell'indirizzo associato al socket dal sender fallita! Errore");
 	}
 	printLog("indirizzo associato al socket dal sender correttamente creato!");
 	/* Inizializzo la struttura per il socket in ricezione dal ritardatore */
 	from = getSocketAddress(fromAddress, 60000);
 	if (sharedError){
-		printError("[ERROR] creazione dell'indirizzo associato al socket dal ritardatore fallita! Errore");
+		printError("creazione dell'indirizzo associato al socket dal ritardatore fallita! Errore");
 	}
 	printLog("indirizzo associato al socket dal ritardatore correttamente creato!");
 	/* Inizializzo la struttura per il socket in invio verso il ritardatore */
 	to = getSocketAddress(toAddress, 61000);
 	if (sharedError){
-		printError("[ERROR] creazione dell'indirizzo associato al socket verso il ritardatore fallita! Errore");
+		printError("creazione dell'indirizzo associato al socket verso il ritardatore fallita! Errore");
 	}
 	printLog("indirizzo associato al socket verso il ritardatore correttamente creato!");
 	
@@ -70,7 +70,6 @@ int main(){
 	/* Leggo i datagram */
 	while(TRUE){
 		/* RICEZIONE TCP */
-		
 		connectedSender = accept(sender, (struct sockaddr *)&sourceClient, &sourceClientLen);
 		printf("accepted!\n");
 		readCounter = recv(connectedSender, recvBuffer, 1000, 0);
