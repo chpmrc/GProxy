@@ -32,12 +32,12 @@ extern char *logFilePath;
 char recvBuffer[PAYLOAD_SIZE], sendBuffer[PAYLOAD_SIZE];
 int trueOpt = 1;
 int sharedError; /* Variabile di riconoscimento errori condivisa, serve per quelle funzioni che non ritornano interi */
-size_t readCounter, sentCounter;
+int readCounter, sentCounter;
 socklen_t toLen = sizeof(to);
 socklen_t sourceClientLen = sizeof(sourceClient);
 
 /* SELECT RELATED */
-fd_set canRead, canWrite, canExcept, canReadCopy, canWriteCopy, canExceptCopy;
+fd_set canRead, canReadCopy;
 struct timeval timeout = { 2, 0 };
 int selectResult;
 int maxFd;
@@ -95,84 +95,58 @@ int main(){
 		printError("There was an error with the accept(). See details below:");
 	}
 	printLog("Sender connected! Waiting for data...");
+	printf("Client port: %d\n", ntohs(sourceClient.sin_port));
 	
 	/* Add the sockets into the sets of descriptors */
-	FD_ZERO(&canRead); FD_ZERO(&canWrite); FD_ZERO(&canExcept);
-	FD_SET(sender, &canRead); 
-	FD_SET(sender, &canExcept);
+	FD_ZERO(&canRead);
+	FD_SET(connectedSender, &canRead); /* Warning! We must wait data on the connected socket, not the listening one! */
 	FD_SET(ritardatore, &canRead);
-	FD_SET(ritardatore, &canWrite);
-	FD_SET(ritardatore, &canExcept);
-	maxFd = (sender < ritardatore)? ritardatore : sender;
+	maxFd = (connectedSender < ritardatore)? ritardatore : connectedSender;
+	
+	/* DEBUG AND TEMPORARY STUFF */
 	
 	/* Leggo i datagram */
 	while(TRUE){
 		/* Make a copy of the fd_set to avoid modifying the original one */
 		canReadCopy = canRead;
-		canWriteCopy = canWrite;
-		canExceptCopy = canExcept;
+		memset(recvBuffer, 0, readCounter);
+		
 		/* Main (and only) point of blocking from now on */
-		selectResult = select(maxFd+1, &canReadCopy, &canWriteCopy, &canExceptCopy, NULL);
+		selectResult = select(maxFd+1, &canReadCopy, NULL, NULL, NULL);
 		
-		/* First of all check for errors on sockets
-		if (FD_ISSET(sender, &canExcept)){
-			printError("There was an error with the sender socket!");
+		/* Check for errors */
+		if (selectResult < 0){
+			printError("There was an error with the select function!");
 		}
-		if (FD_ISSET(ritardatore, &canExcept)){
-			printError("There was an error with the ritardatore socket!");
-		}
-		*/
+		/* Check for active sockets */
+		if (selectResult > 0){
 		
-		/* Now check for I/O availability */
-		if (FD_ISSET(sender, &canRead)){
-			printLog("Receiving data from the sender");
-			/* Here we have to build N packets and put them into a list, then continue the execution */
-			readCounter = recv(connectedSender, recvBuffer, 65000, MSG_DONTWAIT);
-			printf("Read %d bytes!\n", readCounter);
-			if (readCounter == 0){
-				close(sender);
+			/* Now check for I/O availability */
+			if (FD_ISSET(connectedSender, &canReadCopy)){
+				printLog("Receiving data from the sender");
+				/* Here we have to build N packets and put them into a list, then continue the execution */
+				readCounter = recv(connectedSender, recvBuffer, 65000, MSG_DONTWAIT);
+				if (readCounter == 0){
+					close(sender);
+				}
+				sentCounter = sendto(ritardatore, recvBuffer, readCounter, 0, (struct sockaddr *)&to, sizeof(to));
+				if (sentCounter < 0){
+					printError("Error while sending data to the ritardatore!");
+				}
+				if (sentCounter == 0){
+					close(ritardatore); /* The socket of the ritardatore must be closed only when all the packets are sent (from the list) */
+					printLog("ALL DONE!");
+					exit(0);	
+				}
 			}
+			if (FD_ISSET(ritardatore, &canReadCopy)){
+				printLog("Receiving data from the ritardatore");
+				readCounter = recv(ritardatore, recvBuffer, 65000, MSG_DONTWAIT);
+				/* Here we have to verify if an ICMP has been received and
+				 * search the id into the "sent" list. Once we find the guilty
+				 * packet we just put it again into the "toSend" list and switch port.
+				 * If an ACK is received the packet is removed from the "sent" list. */
+			}			
 		}
-		if (FD_ISSET(ritardatore, &canRead)){
-			printLog("Receiving data from the ritardatore");
-			/* Here we have to verify if an ICMP has been received and
-			 * search the id into the "sent" list. Once we find the guilty
-			 * packet we just put it again into the "toSend" list and switch port.
-			 * If an ACK is received the packet is removed from the "sent" list. */
-		}
-		if (FD_ISSET(ritardatore, &canWrite)){
-			printLog("Sending data to the ritardatore");
-			/* Here we have to send as much packets as we can and move them into a "sent" list */
-			sentCounter = sendto(ritardatore, recvBuffer, readCounter, 0, (struct sockaddr *)&to, sizeof(to));
-			/* PROBLEMA: I byte trasmessi sono ok ma per qualche motivo il file non è lo stesso. Che sia la memset? */
-			printf("Sent %d bytes!\n", sentCounter);
-			if (sentCounter != 0){
-				memset(recvBuffer, 0, readCounter);
-			} else {
-				close(ritardatore);
-				printLog("ALL DONE!");
-				exit(0);	
-			}
-		}
-		
-		continue;
-		
-		
-		/* RICEZIONE TCP */
-		readCounter = recv(connectedSender, recvBuffer, 1000, 0);
-		printf("reading!\n");
-		printf("[MGS_TCP]: %s", recvBuffer);
-		memset(recvBuffer, 0, strlen(recvBuffer));
-		exit(0);
-		memset(recvBuffer, 0, strlen(recvBuffer));
-		sleep(3);
-		/* INVIO */
-		sprintf(sendBuffer, "[MSG] Ciao\n");
-		sentCounter = sendto(ritardatore, sendBuffer, strlen(sendBuffer)+1, 0, (struct sockaddr *)&to, sizeof(to));
-		/* RICEZIONE */
-		sleep(3);
-		readCounter = recv(ritardatore, recvBuffer, 1000, MSG_DONTWAIT);
-		printf("[MSG]: %s", recvBuffer);
-		memset(recvBuffer, 0, strlen(recvBuffer));
 	}
 }
