@@ -13,28 +13,20 @@
 #define PAYLOAD_SIZE 65510 /* Computed as IP_total_size - IP_max_header_size - id_size - type_size = 65535 - 20 - 4 - 1 */
 
 /* MAIN STUFF */
-struct sockaddr_in to, from, dest, destClient; /* Indirizzo del socket locale e remoto del ritardatore e del receiver */ 
-int ritardatore, receiver, connectedReceiver; /* socket descriptor verso/da il ritardatore e verso receiver */
-char destAddress[] = "0.0.0.0"; unsigned short int destPort = 64000;
+struct sockaddr_in to, from, dest; /* Indirizzo del socket locale e remoto del ritardatore e del receiver */ 
+int ritardatore, receiver; /* socket descriptor verso/da il ritardatore e verso receiver */
+char destAddress[] = "127.0.0.1"; unsigned short int destPort = 64000;
 char fromAddress[] = "0.0.0.0"; unsigned short int fromPort = 63000;
 char toAddress[] = "127.0.0.1"; unsigned short int toPort = 62000;
-
-/* DATA STRUCTURES */
-typedef struct Pkt {
-	unsigned int id;
-	unsigned char type;
-	char body[PAYLOAD_SIZE];
-} Pkt;
-
 
 /* UTILS */
 extern char *logFilePath;
 char recvBuffer[PAYLOAD_SIZE], sendBuffer[PAYLOAD_SIZE];
-int trueOpt = 1;
+int trueOpt = 1, connectStatus;
 int sharedError; /* Variabile di riconoscimento errori condivisa, serve per quelle funzioni che non ritornano interi */
 int readCounter, sentCounter; /* WARNING: don't use size_t since it's an unsigned numeric type! Not suitable for possible error return values (e.g. -1) */
 socklen_t toLen = sizeof(to);
-socklen_t destClientLen = sizeof(destClient);
+socklen_t destLen = sizeof(dest);
 
 /* SELECT RELATED */
 fd_set canRead, canWrite, canExcept, canReadCopy, canWriteCopy, canExceptCopy;
@@ -61,7 +53,7 @@ int main(){
 	printLog("socket dal receiver correttamente creato!");
 	
 		
-	/* Inizializzo la struttura per il socket in ricezione dal receiver/sorgente */
+	/* Initialize the address to be used to connect to the receiver */
 	dest = getSocketAddress(destAddress, destPort);
 	if (sharedError){
 		printError("creazione dell'indirizzo associato al socket dal receiver fallita! Errore");
@@ -80,44 +72,48 @@ int main(){
 	}
 	printLog("indirizzo associato al socket verso il ritardatore correttamente creato!");
 	
-	/* BINDS AND LISTENS */
+	/* BINDS AND CONNECTS */
 	
 	/* Lego il socket dal ritardatore ad un indirizzo in ricezione */
 	bind(ritardatore, (struct sockaddr *)&from, sizeof(from));
 	
 	/* First of all establish a connection with the dest (only one connection at a time is allowed) */
-	connectedReceiver = connect(receiver, (struct sockaddr *)&destClient, destClientLen);
-	printf("%d\n", connectedReceiver);
-	if (connectedReceiver < 0){
+	connectStatus = connect(receiver, (struct sockaddr *)&dest, destLen);
+	if (connectStatus < 0){
 		printError("There was an error with the accept(). See details below:");
 	}
 	printLog("Connected to Receiver! Waiting for data...");
 	
 	/* Add the sockets into the sets of descriptors */
-	FD_ZERO(&canRead); FD_ZERO(&canWrite); FD_ZERO(&canExcept);
+	FD_ZERO(&canRead); FD_ZERO(&canWrite);
 	FD_SET(receiver, &canWrite);
-	FD_SET(receiver, &canExcept);
 	FD_SET(ritardatore, &canRead);
-	FD_SET(ritardatore, &canExcept);
 	maxFd = (receiver < ritardatore)? ritardatore : receiver;
-	
-	FILE *out = fopen("./sent.it", "w");
 	
 	/* Leggo i datagram */
 	while(TRUE){
-		/* Make a copy of the fd_set to avoid modifying the original one */
+		/* Make a copy of the fd_set to avoid modifying the original one (struct copy) */
 		canReadCopy = canRead;
 		canWriteCopy = canWrite;
-		canExceptCopy = canExcept;
+
 		/* Main (and only) point of blocking from now on */
-		selectResult = select(maxFd+1, &canReadCopy, &canWriteCopy, &canExceptCopy, NULL); /* TODO check the result */
+		selectResult = select(maxFd+1, &canReadCopy, &canWriteCopy, NULL, NULL); /* TODO check the result */
 		
-		readCounter = recv(ritardatore, recvBuffer, 65000, MSG_DONTWAIT);
-		
-		if (readCounter > 0){			
-			fwrite(recvBuffer, readCounter, 1, out);
-			fflush(out);
-			memset(recvBuffer, 0, readCounter);
+		/* Check for errors */
+		if (selectResult < 0){
+			printError("There was an error with the select function!");
+		}
+		/* Check for active sockets */
+		if (selectResult > 0){
+			
+			/* Check if we can send data to the receiver */
+			if (FD_ISSET(receiver, &canWriteCopy)){
+				char *prova = "caini bastasi";
+				send(receiver, prova, 20, 0);
+			}
+				
+			/* Check if we can read data from the ritardatore */
+			
 		}
 	}
 }

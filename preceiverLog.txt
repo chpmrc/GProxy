@@ -1,0 +1,114 @@
+
+
+==================  30/12/12 - 20:35:59 ==================
+
+[LOG] socket da/verso il ritardatore correttamente creato!
+[LOG] socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal ritardatore correttamente creato!
+[LOG] indirizzo associato al socket verso il ritardatore correttamente creato!
+[LOG] Connected to Receiver! Waiting for data...
+
+
+==================  30/12/12 - 20:36:07 ==================
+
+[LOG] socket da/verso il ritardatore correttamente creato!
+[LOG] socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal ritardatore correttamente creato!
+[LOG] indirizzo associato al socket verso il ritardatore correttamente creato!
+[LOG] Connected to Receiver! Waiting for data...
+
+
+==================  30/12/12 - 20:36:32 ==================
+
+[LOG] socket da/verso il ritardatore correttamente creato!
+[LOG] socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal ritardatore correttamente creato!
+[LOG] indirizzo associato al socket verso il ritardatore correttamente creato!
+[LOG] Connected to Receiver! Waiting for data...
+
+
+==================  30/12/12 - 20:40:49 ==================
+
+[LOG] socket da/verso il ritardatore correttamente creato!
+[LOG] socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal ritardatore correttamente creato!
+[LOG] indirizzo associato al socket verso il ritardatore correttamente creato!
+[LOG] Connected to Receiver! Waiting for data...
+
+
+==================  30/12/12 - 20:43:51 ==================
+
+[LOG] socket da/verso il ritardatore correttamente creato!
+[LOG] socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal ritardatore correttamente creato!
+[LOG] indirizzo associato al socket verso il ritardatore correttamente creato!
+[LOG] Connected to Receiver! Waiting for data...
+
+
+==================  30/12/12 - 20:47:39 ==================
+
+[LOG] socket da/verso il ritardatore correttamente creato!
+[LOG] socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal ritardatore correttamente creato!
+[LOG] indirizzo associato al socket verso il ritardatore correttamente creato!
+[ERROR] There was an error with the accept(). See details below:
+	Connection refused
+
+
+==================  30/12/12 - 20:47:41 ==================
+
+[LOG] socket da/verso il ritardatore correttamente creato!
+[LOG] socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal ritardatore correttamente creato!
+[LOG] indirizzo associato al socket verso il ritardatore correttamente creato!
+[ERROR] There was an error with the accept(). See details below:
+	Connection refused
+
+
+==================  30/12/12 - 20:47:45 ==================
+
+[LOG] socket da/verso il ritardatore correttamente creato!
+[LOG] socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal ritardatore correttamente creato!
+[LOG] indirizzo associato al socket verso il ritardatore correttamente creato!
+[LOG] Connected to Receiver! Waiting for data...
+
+
+==================  30/12/12 - 20:48:05 ==================
+
+[LOG] socket da/verso il ritardatore correttamente creato!
+[LOG] socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal ritardatore correttamente creato!
+[LOG] indirizzo associato al socket verso il ritardatore correttamente creato!
+[ERROR] There was an error with the accept(). See details below:
+	Connection refused
+
+
+==================  30/12/12 - 20:48:46 ==================
+
+[LOG] socket da/verso il ritardatore correttamente creato!
+[LOG] socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal ritardatore correttamente creato!
+[LOG] indirizzo associato al socket verso il ritardatore correttamente creato!
+[ERROR] There was an error with the accept(). See details below:
+	Connection refused
+
+
+==================  30/12/12 - 20:48:50 ==================
+
+[LOG] socket da/verso il ritardatore correttamente creato!
+[LOG] socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal ritardatore correttamente creato!
+[LOG] indirizzo associato al socket verso il ritardatore correttamente creato!
+[LOG] Connected to Receiver! Waiting for data...

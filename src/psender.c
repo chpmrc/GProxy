@@ -17,7 +17,7 @@ struct sockaddr_in to, from, source, sourceClient; /* Indirizzo del socket local
 int ritardatore, sender, connectedSender; /* socket descriptor verso/da il ritardatore e dal sender */
 char sourceAddress[] = "0.0.0.0"; unsigned short int sourcePort = 59000;
 char fromAddress[] = "0.0.0.0"; unsigned short int fromPort = 60000;
-char toAddress[] = "127.0.0.1"; unsigned short int toPort = 61000;
+char toAddress[] = "127.0.0.1"; unsigned short int toPort = 63000;
 
 /* DATA STRUCTURES */
 typedef struct Pkt {
@@ -121,9 +121,8 @@ int main(){
 		/* Check for active sockets */
 		if (selectResult > 0){
 		
-			/* Now check for I/O availability */
+			/* Check if we can receive data from the sender */
 			if (FD_ISSET(connectedSender, &canReadCopy)){
-				printLog("Receiving data from the sender");
 				/* Here we have to build N packets and put them into a list, then continue the execution */
 				readCounter = recv(connectedSender, recvBuffer, 65000, MSG_DONTWAIT);
 				if (readCounter == 0){
@@ -139,8 +138,9 @@ int main(){
 					exit(0);	
 				}
 			}
+			
+			/* Check if we can receive data from the ritardatore */
 			if (FD_ISSET(ritardatore, &canReadCopy)){
-				printLog("Receiving data from the ritardatore");
 				readCounter = recv(ritardatore, recvBuffer, 65000, MSG_DONTWAIT);
 				/* Here we have to verify if an ICMP has been received and
 				 * search the id into the "sent" list. Once we find the guilty
