@@ -24,7 +24,7 @@ extern char *logFilePath;
 char recvBuffer[PAYLOAD_SIZE], sendBuffer[PAYLOAD_SIZE];
 int trueOpt = 1, connectStatus;
 int sharedError; /* Variabile di riconoscimento errori condivisa, serve per quelle funzioni che non ritornano interi */
-int readCounter, sentCounter; /* WARNING: don't use size_t since it's an unsigned numeric type! Not suitable for possible error return values (e.g. -1) */
+int recvCounter, sendCounter; /* WARNING: don't use size_t since it's an unsigned numeric type! Not suitable for possible error return values (e.g. -1) */
 socklen_t toLen = sizeof(to);
 socklen_t destLen = sizeof(dest);
 
@@ -103,17 +103,24 @@ int main(){
 		if (selectResult < 0){
 			printError("There was an error with the select function!");
 		}
+		
 		/* Check for active sockets */
 		if (selectResult > 0){
 			
 			/* Check if we can send data to the receiver */
 			if (FD_ISSET(receiver, &canWriteCopy)){
-				char *prova = "caini bastasi";
-				send(receiver, prova, 20, 0);
+				if (recvCounter > 0){
+					send(receiver, recvBuffer, 100, 0);
+					memset(recvBuffer, 0, 100);
+					recvCounter = 0;
+				}
 			}
 				
 			/* Check if we can read data from the ritardatore */
-			
+			if (FD_ISSET(ritardatore, &canReadCopy)){
+				printLog("Posso leggere dal ritardatore");
+				recvCounter = recv(ritardatore, recvBuffer, 100, 0);
+			}
 		}
 	}
 }
