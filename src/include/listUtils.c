@@ -22,14 +22,18 @@ typedef struct Node {
  
 Node *allocPkt(int id, char type, char *body){
 	Node *toAlloc = (Node *)malloc(sizeof(Node));
+	Pkt *packet = (Pkt *)malloc(sizeof(Pkt));
 	if (toAlloc == NULL){
 		perror("Error with malloc()");
 	}
 	toAlloc->next = toAlloc;
 	toAlloc->prev = toAlloc;
-	toAlloc->packet->id = id;
-	toAlloc->packet->type = type;
-	strcpy(toAlloc->packet->body, body);
+	packet->id = id;
+	packet->type = type;
+	if (body != NULL){
+		strcpy(packet->body, body);
+	}
+	toAlloc->packet = packet;
 	return toAlloc;
 }
 
@@ -57,17 +61,18 @@ void appendPkt(Node *head, Node *new){
 Node *removePkt(Node *toRemove){
 	if (toRemove->prev != NULL){
 		toRemove->prev->next = toRemove->next;
-		toRemove->prev = NULL;
 	}
 	if (toRemove->next != NULL){
 		toRemove->next->prev = toRemove->prev;
-		toRemove->next = NULL;
 	}
+	toRemove->prev = NULL;
+	toRemove->next = NULL;
 	return toRemove;
 }
 
 void clearPkt(Node *toClear){
 	removePkt(toClear);
+	free(toClear->packet);
 	free(toClear);
 }
 
@@ -79,4 +84,14 @@ Node *searchPktById(Node *head, int id){
 	}
 	if (iter == head) return NULL;
 	return iter;
+}
+
+void printList(Node *head){
+	Node *iter = head->next;
+	printf("============= LIST OF PACKETS =============\n");
+	while (iter != head){
+		printf("[\n\tid: %d, \tbody: %s\n]\n", iter->packet->id, iter->packet->body);
+		iter = iter->next;
+	}
+	printf("============= END OF LIST =============\n\n");
 }

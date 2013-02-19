@@ -11,8 +11,6 @@
 #include "include/globalUtils.c"
 #include "include/listUtils.c"
 
-#define PAYLOAD_SIZE 65510 /* Computed as IP_total_size - IP_max_header_size - id_size - type_size = 65535 - 20 - 4 - 1 */
-
 /* MAIN STUFF */
 struct sockaddr_in to, from, dest; /* Indirizzo del socket locale e remoto del ritardatore e del receiver */ 
 int ritardatore, receiver; /* socket descriptor verso/da il ritardatore e verso receiver */
@@ -29,7 +27,7 @@ int recvCounter, sendCounter; /* WARNING: don't use size_t since it's an unsigne
 socklen_t toLen = sizeof(to);
 socklen_t destLen = sizeof(dest);
 
-Pkt tempPkt;
+Node *toAck, *current;
 
 /* SELECT RELATED */
 fd_set canRead, canWrite, canExcept, canReadCopy, canWriteCopy, canExceptCopy;
@@ -39,6 +37,9 @@ int maxFd;
 
 int main(){
 	/* INIT */
+	
+	/* Initialize local structures */
+	toAck = allocHead();
 	
 	/* Cambia il path del file di log */
 	logFilePath = "./preceiverLog.txt";
@@ -121,11 +122,15 @@ int main(){
 				
 			/* Check if we can read data from the ritardatore */
 			if (FD_ISSET(ritardatore, &canReadCopy)){
-				printLog("Posso leggere dal ritardatore");
-				memset(&tempPkt, 0, sizeof(Pkt));
-				recvCounter = recv(ritardatore, &tempPkt, 255, 0);
-				printf("Received: %s\n", tempPkt.body);
+				current = allocPkt(0, 'B', NULL);
+				recvCounter = recv(ritardatore, current->packet, sizeof(Pkt), 0);
+				appendPkt(toAck, current);
+				printList(toAck);
+				printf("Received: %s\n", current->packet->body);
 			}
 		}
 	}
 }
+ 
+ 
+ /** Ricevere, creare un nodo, appendere in lista, stampare il contenuto, ack */

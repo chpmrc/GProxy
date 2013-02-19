@@ -130,18 +130,20 @@ int main(){
 				/* Here we have to build n packets and put them into a list, then continue the execution */
 				packetsRead = 0;
 				do {
+					/* Reset the buffer */
+					memset(recvBuffer, 0, sizeof(recvBuffer));
+					/* Fill the buffer */
 					readCounter = recv(connectedSender, recvBuffer, sizeof(Pkt), MSG_DONTWAIT);
 					/* If we read 0 chars it means there is no data left for sure because we are inside the select */
 					if (readCounter == 0){
 						close(sender);
 						/* Don't exit because we still have to see if there are remaining packets to send */
 					}
-					/* Reset the buffer */
-					memset(recvBuffer, 0, sizeof(recvBuffer));
 					/* Build a node and append to the toSend list */
 					current = allocPkt(currentId, 'B', recvBuffer);
-					printf("Sent packet with id: %d\n", currentId);
+					printf("Sent packet with id: %d and body %s\n", currentId, current->packet->body);
 					appendPkt(toAck, current);
+					printList(toAck);
 					currentId++;
 					packetsRead++;				
 					sentCounter = sendto(ritardatore, current->packet, sizeof(Pkt), 0, (struct sockaddr *)&to, sizeof(to));
@@ -154,9 +156,8 @@ int main(){
 						printLog("ALL DONE!");
 						exit(0);	
 					}
-					
+					break;
 				} while(readCounter != 0 && packetsRead < MAX_PACKETS);
-				printf("OUTTA\n");
 				packetsRead = 0;
 				
 				
