@@ -9,8 +9,9 @@
 #include <stdlib.h>
 #include <sys/select.h>
 #include "include/globalUtils.c"
+#include "include/listUtils.c"
 
-#define PAYLOAD_SIZE 65510 /* Computed as IP_total_size - IP_max_header_size - id_size - type_size = 65535 - 20 - 4 - 1 */
+#define MAX_PACKETS 10
 
 /* MAIN STUFF */
 struct sockaddr_in to, from, source, sourceClient; /* Indirizzo del socket locale e remoto del ritardatore e del sender */ 
@@ -19,20 +20,19 @@ char sourceAddress[] = "0.0.0.0"; unsigned short int sourcePort = 59000;
 char fromAddress[] = "0.0.0.0"; unsigned short int fromPort = 60000;
 char toAddress[] = "127.0.0.1"; unsigned short int toPort = 63000;
 
-/* DATA STRUCTURES */
-typedef struct Pkt {
-	unsigned int id;
-	unsigned char type;
-	char body[PAYLOAD_SIZE];
-} Pkt;
+/* DATA STRUCTURES AND LIST HEADS */
 
+Node *toSend, *toAck, *current;
 
 /* UTILS */
 extern char *logFilePath;
 char recvBuffer[PAYLOAD_SIZE], sendBuffer[PAYLOAD_SIZE];
 int trueOpt = 1;
 int sharedError; /* Variabile di riconoscimento errori condivisa, serve per quelle funzioni che non ritornano interi */
-int readCounter, sentCounter;
+int readCounter, 
+	sentCounter, 
+	packetsRead, 
+	currentId;
 socklen_t toLen = sizeof(to);
 socklen_t sourceClientLen = sizeof(sourceClient);
 
@@ -44,6 +44,11 @@ int maxFd;
 
 int main(){
 	/* INIT */
+	
+	/* Initialize local structures */
+	toSend = allocHead();
+	toAck = allocHead();
+	currentId = 0;
 	
 	/* Cambia il path del file di log */
 	logFilePath = "./psenderLog.txt";
@@ -109,7 +114,6 @@ int main(){
 	while(TRUE){
 		/* Make a copy of the fd_set to avoid modifying the original one */
 		canReadCopy = canRead;
-		memset(recvBuffer, 0, readCounter);
 		
 		/* Main (and only) point of blocking from now on */
 		selectResult = select(maxFd+1, &canReadCopy, NULL, NULL, NULL);
@@ -123,20 +127,41 @@ int main(){
 		
 			/* Check if we can receive data from the sender */
 			if (FD_ISSET(connectedSender, &canReadCopy)){
-				/* Here we have to build N packets and put them into a list, then continue the execution */
-				readCounter = recv(connectedSender, recvBuffer, 65000, MSG_DONTWAIT);
-				if (readCounter == 0){
-					close(sender);
-				}
-				sentCounter = sendto(ritardatore, recvBuffer, readCounter, 0, (struct sockaddr *)&to, sizeof(to));
-				if (sentCounter < 0){
-					printError("Error while sending data to the ritardatore!");
-				}
-				if (sentCounter == 0){
-					close(ritardatore); /* The socket of the ritardatore must be closed only when all the packets are sent (from the list) */
-					printLog("ALL DONE!");
-					exit(0);	
-				}
+				/* Here we have to build n packets and put them into a list, then continue the execution */
+				packetsRead = 0;
+				do {
+					readCounter = recv(connectedSender, recvBuffer, sizeof(Pkt), MSG_DONTWAIT);
+					/* If we read 0 chars it means there is no data left for sure because we are inside the select */
+					if (readCounter == 0){
+						close(sender);
+						/* Don't exit because we still have to see if there are remaining packets to send */
+					}
+					/* Reset the buffer */
+					memset(recvBuffer, 0, sizeof(recvBuffer));
+					/* Build a node and append to the toSend list */
+					current = allocPkt(currentId, 'B', recvBuffer);
+					printf("Sent packet with id: %d\n", currentId);
+					appendPkt(toAck, current);
+					currentId++;
+					packetsRead++;				
+					sentCounter = sendto(ritardatore, current->packet, sizeof(Pkt), 0, (struct sockaddr *)&to, sizeof(to));
+					/* Check if we actually sent data */
+					if (sentCounter < 0){
+						printError("Error while sending data to the ritardatore!");
+					}
+					if (sentCounter == 0){
+						close(ritardatore); /* The socket of the ritardatore must be closed only when all the packets are sent (from the list) */
+						printLog("ALL DONE!");
+						exit(0);	
+					}
+					
+				} while(readCounter != 0 && packetsRead < MAX_PACKETS);
+				printf("OUTTA\n");
+				packetsRead = 0;
+				
+				
+				/* If we get here we sent at least 1 packet to the ritardatore */
+				
 			}
 			
 			/* Check if we can receive data from the ritardatore */

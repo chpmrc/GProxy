@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <sys/select.h>
 #include "include/globalUtils.c"
+#include "include/listUtils.c"
 
 #define PAYLOAD_SIZE 65510 /* Computed as IP_total_size - IP_max_header_size - id_size - type_size = 65535 - 20 - 4 - 1 */
 
@@ -27,6 +28,8 @@ int sharedError; /* Variabile di riconoscimento errori condivisa, serve per quel
 int recvCounter, sendCounter; /* WARNING: don't use size_t since it's an unsigned numeric type! Not suitable for possible error return values (e.g. -1) */
 socklen_t toLen = sizeof(to);
 socklen_t destLen = sizeof(dest);
+
+Pkt tempPkt;
 
 /* SELECT RELATED */
 fd_set canRead, canWrite, canExcept, canReadCopy, canWriteCopy, canExceptCopy;
@@ -80,7 +83,7 @@ int main(){
 	/* First of all establish a connection with the dest (only one connection at a time is allowed) */
 	connectStatus = connect(receiver, (struct sockaddr *)&dest, destLen);
 	if (connectStatus < 0){
-		printError("There was an error with the accept(). See details below:");
+		printError("There was an error with the connect(). See details below:");
 	}
 	printLog("Connected to Receiver! Waiting for data...");
 	
@@ -97,7 +100,7 @@ int main(){
 		canWriteCopy = canWrite;
 
 		/* Main (and only) point of blocking from now on */
-		selectResult = select(maxFd+1, &canReadCopy, &canWriteCopy, NULL, NULL); /* TODO check the result */
+		selectResult = select(maxFd+1, &canReadCopy, &canWriteCopy, NULL, NULL);
 		
 		/* Check for errors */
 		if (selectResult < 0){
@@ -119,7 +122,9 @@ int main(){
 			/* Check if we can read data from the ritardatore */
 			if (FD_ISSET(ritardatore, &canReadCopy)){
 				printLog("Posso leggere dal ritardatore");
-				recvCounter = recv(ritardatore, recvBuffer, 100, 0);
+				memset(&tempPkt, 0, sizeof(Pkt));
+				recvCounter = recv(ritardatore, &tempPkt, 255, 0);
+				printf("Received: %s\n", tempPkt.body);
 			}
 		}
 	}
