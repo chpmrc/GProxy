@@ -167,11 +167,15 @@ int main(){
 			
 			/* Check if we can receive data from the ritardatore */
 			if (FD_ISSET(ritardatore, &canReadCopy)){
-				readCounter = recv(ritardatore, recvBuffer, 65000, MSG_DONTWAIT);
-				/* Here we have to verify if an ICMP has been received and
-				 * search the id into the "sent" list. Once we find the guilty
-				 * packet we just put it again into the "toSend" list and switch port.
-				 * If an ACK is received the packet is removed from the "sent" list. */
+				readCounter = recv(ritardatore, current->packet, sizeof(Pkt), MSG_DONTWAIT);
+				/* Check the type of the packet */
+				if (current->packet->type == 'B'){
+					/* If we receive a body packet it must be an ack from the preceiver */
+					printf("Received: %s\n", current->packet->body);
+					removePktById(toAck, atoi(current->packet->body));
+				} else {
+					/* Otherwise we received an ICMP packet from the ritardatore */
+				}
 			}			
 		}
 	}

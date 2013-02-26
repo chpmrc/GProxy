@@ -189,3 +189,14 @@
 [LOG] Connected to Receiver! Waiting for data...
 [LOG] Posso leggere dal ritardatore
 [LOG] Posso leggere dal ritardatore
+
+
+==================  21/02/13 - 14:09:11 ==================
+
+[LOG] socket da/verso il ritardatore correttamente creato!
+[LOG] socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal receiver correttamente creato!
+[LOG] indirizzo associato al socket dal ritardatore correttamente creato!
+[LOG] indirizzo associato al socket verso il ritardatore correttamente creato!
+[ERROR] There was an error with the connect(). See details below:
+	Connection refused

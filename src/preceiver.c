@@ -16,18 +16,21 @@ struct sockaddr_in to, from, dest; /* Indirizzo del socket locale e remoto del r
 int ritardatore, receiver; /* socket descriptor verso/da il ritardatore e verso receiver */
 char destAddress[] = "127.0.0.1"; unsigned short int destPort = 64000;
 char fromAddress[] = "0.0.0.0"; unsigned short int fromPort = 63000;
-char toAddress[] = "127.0.0.1"; unsigned short int toPort = 62000;
+char toAddress[] = "127.0.0.1"; unsigned short int toPort = 60000;
 
 /* UTILS */
 extern char *logFilePath;
 char recvBuffer[PAYLOAD_SIZE], sendBuffer[PAYLOAD_SIZE];
 int trueOpt = 1, connectStatus;
 int sharedError; /* Variabile di riconoscimento errori condivisa, serve per quelle funzioni che non ritornano interi */
-int recvCounter, sendCounter; /* WARNING: don't use size_t since it's an unsigned numeric type! Not suitable for possible error return values (e.g. -1) */
+int recvCounter, sendCounter, lastId; /* WARNING: don't use size_t since it's an unsigned numeric type! Not suitable for possible error return values (e.g. -1) */
 socklen_t toLen = sizeof(to);
 socklen_t destLen = sizeof(dest);
 
-Node *toAck, *current;
+Node *toAck, *ackD; /* List heads */
+Node *iter, *current; /* Simple iterators */
+
+Pkt ack; /* Used to send ack to the psender */
 
 /* SELECT RELATED */
 fd_set canRead, canWrite, canExcept, canReadCopy, canWriteCopy, canExceptCopy;
@@ -35,8 +38,20 @@ struct timeval timeout = { 2, 0 };
 int selectResult;
 int maxFd;
 
+/**
+ * Simply send an ack for the given packet and remove it from
+ * the list
+ */
+void ackPkt(Node *current){
+	/* Build and send the ack */
+	sprintf(ack.body, "%d%c%d", 0, 'B', current->packet->id);
+	/* Since we have to send on a different port we can't use the default binding, sendto is mandatory */
+	sendto(ritardatore, &ack, sizeof(Pkt), 0, (struct sockaddr *)&to, toLen);
+	removePkt(head);
+	clearPkt(head);
+}
+
 int main(){
-	/* INIT */
 	
 	/* Initialize local structures */
 	toAck = allocHead();
@@ -110,27 +125,36 @@ int main(){
 		
 		/* Check for active sockets */
 		if (selectResult > 0){
-			
-			/* Check if we can send data to the receiver */
-			if (FD_ISSET(receiver, &canWriteCopy)){
-				if (recvCounter > 0){
-					send(receiver, recvBuffer, 100, 0);
-					memset(recvBuffer, 0, 100);
-					recvCounter = 0;
-				}
-			}
 				
 			/* Check if we can read data from the ritardatore */
 			if (FD_ISSET(ritardatore, &canReadCopy)){
 				current = allocPkt(0, 'B', NULL);
 				recvCounter = recv(ritardatore, current->packet, sizeof(Pkt), 0);
-				appendPkt(toAck, current);
-				printList(toAck);
-				printf("Received: %s\n", current->packet->body);
+				printf("Received id %d\n", current->packet->id);
+				if (recvCounter > 0){
+					insertPktById(toAck, current);
+					lastId = current->packet->id;
+					printList(toAck);
+				}
+			}
+			
+			/* Check if we can send data to the receiver */
+			if (FD_ISSET(receiver, &canWriteCopy)){
+				/* Scan the packets list */	
+				
+				
+				
+				
+				
+				if (lastId != -1){
+					current = searchPktById(toAck, lastId);
+					lastId = -1;
+					strcpy(recvBuffer, current->packet->body);
+					send(receiver, recvBuffer, PAYLOAD_SIZE, 0);
+					ackPkt(current);
+					memset(recvBuffer, 0, 100);
+				}
 			}
 		}
 	}
 }
- 
- 
- /** Ricevere, creare un nodo, appendere in lista, stampare il contenuto, ack */
