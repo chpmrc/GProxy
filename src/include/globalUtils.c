@@ -17,6 +17,9 @@
 #define FALSE 0
 #define SOCKERROR -1
 
+/* Shared values (PROTOCOL) */
+char endingBody[] = "inanisonoblu\n";
+
 int sharedError; /* errno-like variable */
 char *logFilePath = "./log.txt"; /* Log is also saved to a file */
 int firstExecution = TRUE; /* At the beginning do something, then something else */

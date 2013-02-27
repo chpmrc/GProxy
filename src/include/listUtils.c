@@ -7,6 +7,10 @@
 #include <stdio.h>
  
 #define PAYLOAD_SIZE 65000 /* Careful! There might be an error as "Message too long" */
+#define TRUE 1
+#define FALSE 0
+
+typedef int boolean;
  
 typedef struct Pkt {
 	unsigned int id;
@@ -21,7 +25,7 @@ typedef struct Node {
 } Node;
 
  
-Node *allocPkt(int id, char type, char *body){
+Node *allocNode(int id, char type, char *body){
 	Node *toAlloc = (Node *)malloc(sizeof(Node));
 	Pkt *packet = (Pkt *)malloc(sizeof(Pkt));
 	if (toAlloc == NULL){
@@ -54,7 +58,7 @@ Pkt *getPkt(Node *node){
 	return node->packet;
 }
  
-void appendPkt(Node *head, Node *new){
+void appendNode(Node *head, Node *new){
 	new->prev = head->prev;
 	new->next = head;
 	head->prev->next = new;
@@ -65,28 +69,34 @@ void appendPkt(Node *head, Node *new){
 	}
 }
 
-Node *removePkt(Node *toRemove){
-	Node *head = toRemove->head;
-	if (toRemove == NULL) return NULL;
-	if (toRemove->prev != NULL){
-		toRemove->prev->next = toRemove->next;
+Node *removeNode(Node *toRemove){
+	if (toRemove != NULL){
+		Node *head = toRemove->head;
+		if (toRemove == NULL) return NULL;
+		if (toRemove->prev != NULL){
+			toRemove->prev->next = toRemove->next;
+		}
+		if (toRemove->next != NULL){
+			toRemove->next->prev = toRemove->prev;
+		}
+		toRemove->prev = NULL;
+		toRemove->next = NULL;
+		toRemove->head = NULL;
+		head->length -= 1;
+		return toRemove;
+	} else {
+		return NULL;
 	}
-	if (toRemove->next != NULL){
-		toRemove->next->prev = toRemove->prev;
-	}
-	toRemove->prev = NULL;
-	toRemove->next = NULL;
-	toRemove->head = NULL;
-	head->length -= 1;
-	return toRemove;
 }
 
-void clearPkt(Node *toClear){
-	free(toClear->packet);
-	free(toClear);
+void clearNode(Node *toClear){
+	if (toClear != NULL){
+		free(toClear->packet);
+		free(toClear);
+	}
 }
 
-Node *searchPktById(Node *head, int id){
+Node *searchNodeById(Node *head, int id){
 	/* Start from the first real node */
 	Node *iter = head->next;
 	while (iter != head && iter->packet->id != id){
@@ -96,23 +106,32 @@ Node *searchPktById(Node *head, int id){
 	return iter;
 }
 
-void insertPktById(Node *head, Node *new){
+boolean insertNodeById(Node *head, Node *new){
 	/* Start from the first real node */
+	boolean present = FALSE; /* For efficiency */
 	Node *iter = head->next;
 	while (iter != head && iter->packet->id < new->packet->id){
+		if (iter != head && iter->packet->id == new->packet->id){
+			present = TRUE;
+			break;
+		}
 		iter = iter->next;
 	}
-	iter->prev->next = new;
-	new->prev = iter->prev;
-	iter->prev = new;
-	new->next = iter;
-	new->head = head;
-	head->length += 1;
+	if (!present){
+		iter->prev->next = new;
+		new->prev = iter->prev;
+		iter->prev = new;
+		new->next = iter;
+		new->head = head;
+		head->length += 1;
+		return TRUE;
+	}
+	return FALSE;
 }
 
-Node *removePktById(Node *head, int id){
-	Node *temp = searchPktById(head, id);
-	removePkt(temp);
+Node *removeNodeById(Node *head, int id){
+	Node *temp = searchNodeById(head, id);
+	removeNode(temp);
 	return temp;
 }
 
@@ -122,10 +141,11 @@ void printNode(Node *n){
 
 /* Foreach implementation with callback */
 void forEach(Node *head, void (*callbackPtr)(Node *)){
-	Node *iter = head->next;
+	Node *iter = head->next, *next;
 	while (iter != head){
+		next = iter->next;
 		(*callbackPtr)(iter);
-		iter = iter->next;
+		iter = next; /* Avoid segmentation fault if the callback modifies the list */
 	}
 }
 

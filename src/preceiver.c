@@ -23,14 +23,17 @@ extern char *logFilePath;
 char recvBuffer[PAYLOAD_SIZE], sendBuffer[PAYLOAD_SIZE];
 int trueOpt = 1, connectStatus;
 int sharedError; /* Variabile di riconoscimento errori condivisa, serve per quelle funzioni che non ritornano interi */
-int recvCounter, sendCounter, lastId; /* WARNING: don't use size_t since it's an unsigned numeric type! Not suitable for possible error return values (e.g. -1) */
+int recvCounter, sendCounter; /* WARNING: don't use size_t since it's an unsigned numeric type! Not suitable for possible error return values (e.g. -1) */
 socklen_t toLen = sizeof(to);
 socklen_t destLen = sizeof(dest);
 
 Node *toAck, *ackD; /* List heads */
 Node *iter, *current; /* Simple iterators */
+boolean result; /* Simple container for results */
+int lastAckId = 0;
+boolean finalize = FALSE;
 
-Pkt ack; /* Used to send ack to the psender */
+
 
 /* SELECT RELATED */
 fd_set canRead, canWrite, canExcept, canReadCopy, canWriteCopy, canExceptCopy;
@@ -43,12 +46,28 @@ int maxFd;
  * the list
  */
 void ackPkt(Node *current){
+	Pkt ack; /* Used to send ack to the psender */
 	/* Build and send the ack */
-	sprintf(ack.body, "%d%c%d", 0, 'B', current->packet->id);
+	ack.id = 0;
+	ack.type = 'B';
+	sprintf(ack.body, "%d%c", current->packet->id, '\0');
+	lastAckId = current->packet->id;	
+	printf("Sending ack for ID %d\n", current->packet->id);
 	/* Since we have to send on a different port we can't use the default binding, sendto is mandatory */
 	sendto(ritardatore, &ack, sizeof(Pkt), 0, (struct sockaddr *)&to, toLen);
-	removePkt(head);
-	clearPkt(head);
+	removeNode(current);
+	clearNode(current);
+}
+
+void sendAcks(Node *current){
+	if (current != NULL){
+		printf("current id: %d, lastAckId: %d\n", current->packet->id, lastAckId);
+		/* Don't send the ending packet! */
+		if (current->packet->id > lastAckId){
+			send(receiver, current->packet->body, PAYLOAD_SIZE, 0);
+		}
+		ackPkt(current);
+	}
 }
 
 int main(){
@@ -128,31 +147,30 @@ int main(){
 				
 			/* Check if we can read data from the ritardatore */
 			if (FD_ISSET(ritardatore, &canReadCopy)){
-				current = allocPkt(0, 'B', NULL);
+				current = allocNode(0, 'B', NULL);
 				recvCounter = recv(ritardatore, current->packet, sizeof(Pkt), 0);
-				printf("Received id %d\n", current->packet->id);
+				printf("Received %d\n", current->packet->id);
 				if (recvCounter > 0){
-					insertPktById(toAck, current);
-					lastId = current->packet->id;
-					printList(toAck);
+					if (strcmp(current->packet->body, endingBody) == 0){
+						finalize = TRUE;
+					} else if (!(result = insertNodeById(toAck, current))){
+						printf("Node %d already present, ignoring...\n", current->packet->id);
+					}
+					
+					/* printList(toAck); */
 				}
 			}
 			
 			/* Check if we can send data to the receiver */
 			if (FD_ISSET(receiver, &canWriteCopy)){
 				/* Scan the packets list */	
-				
-				
-				
-				
-				
-				if (lastId != -1){
-					current = searchPktById(toAck, lastId);
-					lastId = -1;
-					strcpy(recvBuffer, current->packet->body);
-					send(receiver, recvBuffer, PAYLOAD_SIZE, 0);
-					ackPkt(current);
-					memset(recvBuffer, 0, 100);
+				forEach(toAck, &sendAcks);
+				if (finalize){
+					/* CLOSE */
+					printf("TRANSMISSION COMPLETE!\n");
+					close(ritardatore);
+					close(receiver);
+					exit(0);
 				}
 			}
 		}

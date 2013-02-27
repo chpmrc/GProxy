@@ -22,7 +22,8 @@ char toAddress[] = "127.0.0.1"; unsigned short int toPort = 63000;
 
 /* DATA STRUCTURES AND LIST HEADS */
 
-Node *toSend, *toAck, *current;
+Node *toSend, *toAck, *current, *endingNode;
+Pkt currentAck;
 
 /* UTILS */
 extern char *logFilePath;
@@ -36,11 +37,28 @@ int readCounter,
 socklen_t toLen = sizeof(to);
 socklen_t sourceClientLen = sizeof(sourceClient);
 
+boolean finalize = FALSE;
+
 /* SELECT RELATED */
 fd_set canRead, canReadCopy;
 struct timeval timeout = { 2, 0 };
 int selectResult;
 int maxFd;
+
+void sendPacket(Node *node){
+	Pkt *pkt = node->packet;
+	sentCounter = sendto(ritardatore, pkt, sizeof(Pkt), 0, (struct sockaddr *)&to, sizeof(to));
+	if (sentCounter < 0){
+		perror("There was an error with sendto()");
+		exit(1);
+	} else {
+		printf("Sent ID %d\n", pkt->id);
+		if (strcmp(pkt->body, endingBody) == 0){
+			close(ritardatore);
+			exit(0);
+		}
+	}
+}
 
 int main(){
 	/* INIT */
@@ -48,7 +66,7 @@ int main(){
 	/* Initialize local structures */
 	toSend = allocHead();
 	toAck = allocHead();
-	currentId = 0;
+	currentId = 1; /* 0 is reserved! */
 	
 	/* Cambia il path del file di log */
 	logFilePath = "./psenderLog.txt";
@@ -108,8 +126,6 @@ int main(){
 	FD_SET(ritardatore, &canRead);
 	maxFd = (connectedSender < ritardatore)? ritardatore : connectedSender;
 	
-	/* DEBUG AND TEMPORARY STUFF */
-	
 	/* Leggo i datagram */
 	while(TRUE){
 		/* Make a copy of the fd_set to avoid modifying the original one */
@@ -127,52 +143,52 @@ int main(){
 		
 			/* Check if we can receive data from the sender */
 			if (FD_ISSET(connectedSender, &canReadCopy)){
-				/* Here we have to build n packets and put them into a list, then continue the execution */
-				packetsRead = 0;
-				do {
-					/* Reset the buffer */
-					memset(recvBuffer, 0, sizeof(recvBuffer));
-					/* Fill the buffer */
-					readCounter = recv(connectedSender, recvBuffer, sizeof(Pkt), MSG_DONTWAIT);
-					/* If we read 0 chars it means there is no data left for sure because we are inside the select */
-					if (readCounter == 0){
-						close(sender);
-						/* Don't exit because we still have to see if there are remaining packets to send */
-					}
-					/* Build a node and append to the toSend list */
-					current = allocPkt(currentId, 'B', recvBuffer);
-					printf("Sent packet with id: %d and body %s\n", currentId, current->packet->body);
-					appendPkt(toAck, current);
-					printList(toAck);
-					currentId++;
-					packetsRead++;				
-					sentCounter = sendto(ritardatore, current->packet, sizeof(Pkt), 0, (struct sockaddr *)&to, sizeof(to));
-					/* Check if we actually sent data */
-					if (sentCounter < 0){
-						printError("Error while sending data to the ritardatore!");
-					}
-					if (sentCounter == 0){
-						close(ritardatore); /* The socket of the ritardatore must be closed only when all the packets are sent (from the list) */
-						printLog("ALL DONE!");
-						exit(0);	
-					}
-					break;
-				} while(readCounter != 0 && packetsRead < MAX_PACKETS);
-				packetsRead = 0;
+				/* Here we have to build n packets and put them into a list */
+				/* Fill the buffer */
+				readCounter = recv(connectedSender, recvBuffer, sizeof(Pkt), MSG_DONTWAIT);
+				/* Mark the end of the string */
+				recvBuffer[readCounter] = '\0';
+				/* Check cases */
+				switch(readCounter){
+					case 0:
+						finalize = TRUE;
+						break;
+						
+					case -1:
+						/* ERROR */
+						break;
+						
+					default:
+						/* Build a node and append to the toSend list */
+						current = allocNode(currentId, 'B', recvBuffer);
+						appendNode(toAck, current);
+						/* printList(toAck); */ /* DEBUG */
+						currentId++;
+						
+				}				
 				
-				
-				/* If we get here we sent at least 1 packet to the ritardatore */
-				
+				/* Here we have to scan the list and send its packets */
+				forEach(toAck, &sendPacket);
+							
 			}
 			
 			/* Check if we can receive data from the ritardatore */
 			if (FD_ISSET(ritardatore, &canReadCopy)){
-				readCounter = recv(ritardatore, current->packet, sizeof(Pkt), MSG_DONTWAIT);
+				readCounter = recv(ritardatore, &currentAck, sizeof(Pkt), MSG_DONTWAIT);
 				/* Check the type of the packet */
-				if (current->packet->type == 'B'){
+				if (currentAck.type == 'B'){
 					/* If we receive a body packet it must be an ack from the preceiver */
-					printf("Received: %s\n", current->packet->body);
-					removePktById(toAck, atoi(current->packet->body));
+					printf("Received ACK for ID: %s\n", currentAck.body);
+					current = removeNodeById(toAck, atoi(currentAck.body));
+					clearNode(current);
+					/* If we reached the end of the transmission send the final packet */
+					if (finalize && toAck->length == 0){
+						/* We can send the ending packet only when there are no packets left to be sent */
+						printf("Finalizing transmission...\n");
+						endingNode = allocNode(0, 'B', endingBody);
+						appendNode(toAck, endingNode);
+						sendPacket(endingNode);
+					}
 				} else {
 					/* Otherwise we received an ICMP packet from the ritardatore */
 				}
