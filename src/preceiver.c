@@ -61,10 +61,11 @@ void ackPkt(Node *current){
 
 void sendAcks(Node *current){
 	if (current != NULL){
-		printf("current id: %d, lastAckId: %d\n", current->packet->id, lastAckId);
 		/* Don't send the ending packet! */
 		if (current->packet->id > lastAckId){
-			send(receiver, current->packet->body, PAYLOAD_SIZE, 0);
+			printf("Transmitted ID: %d, lastAckId: %d\n", current->packet->id, lastAckId);
+			sendCounter = send(receiver, current->packet->body, current->pktSize - HEADER_SIZE, 0); /* Only send the body! */
+			printf("Inviati %d byte!\n", sendCounter);
 		}
 		ackPkt(current);
 	}
@@ -82,13 +83,13 @@ int main(){
 	if ((ritardatore = getSocket(SOCK_DGRAM)) == SOCKERROR){
 		printError("creazione fallita per il socket da/verso il ritardatore! Errore");
 	}
-	printLog("socket da/verso il ritardatore correttamente creato!");
+	printf("[LOG] socket da/verso il ritardatore correttamente creato!\n");
 	
 	/* Creo il socket descriptor per la sorgente/receiver */
 	if ((receiver = getSocket(SOCK_STREAM)) == SOCKERROR){
 		printError("creazione fallita per il socket dal receiver! Errore");
 	}
-	printLog("socket dal receiver correttamente creato!");
+	printf("[LOG] socket dal receiver correttamente creato!\n");
 	
 		
 	/* Initialize the address to be used to connect to the receiver */
@@ -96,19 +97,19 @@ int main(){
 	if (sharedError){
 		printError("creazione dell'indirizzo associato al socket dal receiver fallita! Errore");
 	}
-	printLog("indirizzo associato al socket dal receiver correttamente creato!");
+	printf("[LOG] indirizzo associato al socket del receiver correttamente creato: %s:%d\n", destAddress, destPort);
 	/* Inizializzo la struttura per il socket in ricezione dal ritardatore */
 	from = getSocketAddress(fromAddress, fromPort);
 	if (sharedError){
 		printError("creazione dell'indirizzo associato al socket dal ritardatore fallita! Errore");
 	}
-	printLog("indirizzo associato al socket dal ritardatore correttamente creato!");
+	printf("[LOG] indirizzo associato al socket dal ritardatore correttamente creato: %s:%d\n", fromAddress, fromPort);
 	/* Inizializzo la struttura per il socket in invio verso il ritardatore */
 	to = getSocketAddress(toAddress, toPort);
 	if (sharedError){
 		printError("creazione dell'indirizzo associato al socket verso il ritardatore fallita! Errore");
 	}
-	printLog("indirizzo associato al socket verso il ritardatore correttamente creato!");
+	printf("[LOG] indirizzo associato al socket verso il ritardatore correttamente creato: %s:%d\n", toAddress, toPort);
 	
 	/* BINDS AND CONNECTS */
 	
@@ -120,7 +121,7 @@ int main(){
 	if (connectStatus < 0){
 		printError("There was an error with the connect(). See details below:");
 	}
-	printLog("Connected to Receiver! Waiting for data...");
+	printf("[LOG] Connected to Receiver! Waiting for data...\n");
 	
 	/* Add the sockets into the sets of descriptors */
 	FD_ZERO(&canRead); FD_ZERO(&canWrite);
@@ -147,10 +148,13 @@ int main(){
 				
 			/* Check if we can read data from the ritardatore */
 			if (FD_ISSET(ritardatore, &canReadCopy)){
-				current = allocNode(0, 'B', NULL);
+				current = allocNode(0, 'B', NULL, 0);
+				memset(current->packet, 0, sizeof(Pkt));
 				recvCounter = recv(ritardatore, current->packet, sizeof(Pkt), 0);
 				printf("Received %d\n", current->packet->id);
 				if (recvCounter > 0){
+					printf("Letti %d byte\n", recvCounter);
+					current->pktSize = recvCounter;
 					if (strcmp(current->packet->body, endingBody) == 0){
 						finalize = TRUE;
 					} else if (!(result = insertNodeById(toAck, current))){

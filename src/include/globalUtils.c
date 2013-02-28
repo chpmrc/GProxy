@@ -16,9 +16,10 @@
 #define TRUE 1
 #define FALSE 0
 #define SOCKERROR -1
+#define HEADER_SIZE 5
 
 /* Shared values (PROTOCOL) */
-char endingBody[] = "inanisonoblu\n";
+char endingBody[] = "inanisonoblu";
 
 int sharedError; /* errno-like variable */
 char *logFilePath = "./log.txt"; /* Log is also saved to a file */
@@ -93,7 +94,6 @@ void printError(char *message){
 	}
 	sprintf(msg, "%s%s\n\t%s\n", "[ERROR] ", message, errstr);
 	printf("%s", msg);
-	logAppend(msg);
 	exit(1);
 }
 

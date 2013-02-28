@@ -22,10 +22,11 @@ typedef struct Node {
 	Pkt *packet;
 	struct Node *next, *prev, *head;
 	int length; /* Only used in heads */
+	int pktSize;
 } Node;
 
  
-Node *allocNode(int id, char type, char *body){
+Node *allocNode(int id, char type, char *body, int size){
 	Node *toAlloc = (Node *)malloc(sizeof(Node));
 	Pkt *packet = (Pkt *)malloc(sizeof(Pkt));
 	if (toAlloc == NULL){
@@ -34,10 +35,12 @@ Node *allocNode(int id, char type, char *body){
 	toAlloc->next = toAlloc;
 	toAlloc->prev = toAlloc;
 	toAlloc->length = -1;
+	toAlloc->pktSize = 0;
 	packet->id = id;
 	packet->type = type;
 	if (body != NULL){
-		strcpy(packet->body, body);
+		strncpy(packet->body, body, size);
+		toAlloc->pktSize = size;
 	}
 	toAlloc->packet = packet;
 	return toAlloc;
@@ -51,6 +54,7 @@ Node *allocHead(){
 	toAlloc->next = toAlloc;
 	toAlloc->prev = toAlloc;
 	toAlloc->length = 0;
+	toAlloc->pktSize = -1;
 	return toAlloc;
 }
 

@@ -21,13 +21,12 @@ char fromAddress[] = "0.0.0.0"; unsigned short int fromPort = 60000;
 char toAddress[] = "127.0.0.1"; unsigned short int toPort = 63000;
 
 /* DATA STRUCTURES AND LIST HEADS */
-
+char recvBuffer[PAYLOAD_SIZE];
 Node *toSend, *toAck, *current, *endingNode;
 Pkt currentAck;
 
 /* UTILS */
 extern char *logFilePath;
-char recvBuffer[PAYLOAD_SIZE], sendBuffer[PAYLOAD_SIZE];
 int trueOpt = 1;
 int sharedError; /* Variabile di riconoscimento errori condivisa, serve per quelle funzioni che non ritornano interi */
 int readCounter, 
@@ -47,7 +46,7 @@ int maxFd;
 
 void sendPacket(Node *node){
 	Pkt *pkt = node->packet;
-	sentCounter = sendto(ritardatore, pkt, sizeof(Pkt), 0, (struct sockaddr *)&to, sizeof(to));
+	sentCounter = sendto(ritardatore, pkt, node->pktSize, 0, (struct sockaddr *)&to, sizeof(to));
 	if (sentCounter < 0){
 		perror("There was an error with sendto()");
 		exit(1);
@@ -75,13 +74,13 @@ int main(){
 	if ((ritardatore = getSocket(SOCK_DGRAM)) == SOCKERROR){
 		printError("creazione fallita per il socket da/verso il ritardatore! Errore");
 	}
-	printLog("socket da/verso il ritardatore correttamente creato!");
+	printf("[LOG] socket da/verso il ritardatore correttamente creato!\n");
 	
 	/* Creo il socket descriptor per la sorgente/sender */
 	if ((sender = getSocket(SOCK_STREAM)) == SOCKERROR){
 		printError("creazione fallita per il socket dal sender! Errore");
 	}
-	printLog("socket dal sender correttamente creato!");
+	printf("[LOG] socket dal sender correttamente creato!\n");
 	
 		
 	/* Inizializzo la struttura per il socket in ricezione dal sender/sorgente */
@@ -89,19 +88,19 @@ int main(){
 	if (sharedError){
 		printError("creazione dell'indirizzo associato al socket dal sender fallita! Errore");
 	}
-	printLog("indirizzo associato al socket dal sender correttamente creato!");
+	printf("[LOG] indirizzo associato al socket dal sender correttamente creato: %s:%d\n", sourceAddress, sourcePort);
 	/* Inizializzo la struttura per il socket in ricezione dal ritardatore */
 	from = getSocketAddress(fromAddress, fromPort);
 	if (sharedError){
 		printError("creazione dell'indirizzo associato al socket dal ritardatore fallita! Errore");
 	}
-	printLog("indirizzo associato al socket dal ritardatore correttamente creato!");
+	printf("[LOG] indirizzo associato al socket dal ritardatore correttamente creato: %s:%d\n", fromAddress, fromPort);
 	/* Inizializzo la struttura per il socket in invio verso il ritardatore */
 	to = getSocketAddress(toAddress, toPort);
 	if (sharedError){
 		printError("creazione dell'indirizzo associato al socket verso il ritardatore fallita! Errore");
 	}
-	printLog("indirizzo associato al socket verso il ritardatore correttamente creato!");
+	printf("[LOG] indirizzo associato al socket verso il ritardatore correttamente creato: %s:%d\n", toAddress, toPort);
 	
 	/* BINDS AND LISTENS */
 	
@@ -117,8 +116,8 @@ int main(){
 	if (connectedSender < 0){
 		printError("There was an error with the accept(). See details below:");
 	}
-	printLog("Sender connected! Waiting for data...");
-	printf("Client port: %d\n", ntohs(sourceClient.sin_port));
+	printf("[LOG] Sender connected! Waiting for data...");
+	printf("[LOG] Client port: %d\n", ntohs(sourceClient.sin_port));
 	
 	/* Add the sockets into the sets of descriptors */
 	FD_ZERO(&canRead);
@@ -145,9 +144,8 @@ int main(){
 			if (FD_ISSET(connectedSender, &canReadCopy)){
 				/* Here we have to build n packets and put them into a list */
 				/* Fill the buffer */
-				readCounter = recv(connectedSender, recvBuffer, sizeof(Pkt), MSG_DONTWAIT);
-				/* Mark the end of the string */
-				recvBuffer[readCounter] = '\0';
+				readCounter = recv(connectedSender, recvBuffer, PAYLOAD_SIZE, MSG_DONTWAIT);
+				printf("Letti %d byte\n", readCounter);
 				/* Check cases */
 				switch(readCounter){
 					case 0:
@@ -160,7 +158,7 @@ int main(){
 						
 					default:
 						/* Build a node and append to the toSend list */
-						current = allocNode(currentId, 'B', recvBuffer);
+						current = allocNode(currentId, 'B', recvBuffer, readCounter+HEADER_SIZE);
 						appendNode(toAck, current);
 						/* printList(toAck); */ /* DEBUG */
 						currentId++;
@@ -185,9 +183,9 @@ int main(){
 					if (finalize && toAck->length == 0){
 						/* We can send the ending packet only when there are no packets left to be sent */
 						printf("Finalizing transmission...\n");
-						endingNode = allocNode(0, 'B', endingBody);
-						appendNode(toAck, endingNode);
+						endingNode = allocNode(0, 'B', endingBody, strlen(endingBody)+HEADER_SIZE+1);
 						sendPacket(endingNode);
+						clearNode(endingNode);
 					}
 				} else {
 					/* Otherwise we received an ICMP packet from the ritardatore */
