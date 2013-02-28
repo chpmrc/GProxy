@@ -144,8 +144,7 @@ int main(){
 			if (FD_ISSET(connectedSender, &canReadCopy)){
 				/* Here we have to build n packets and put them into a list */
 				/* Fill the buffer */
-				readCounter = recv(connectedSender, recvBuffer, PAYLOAD_SIZE, MSG_DONTWAIT);
-				printf("Letti %d byte\n", readCounter);
+				readCounter = recv(connectedSender, recvBuffer, PAYLOAD_SIZE, 0);
 				/* Check cases */
 				switch(readCounter){
 					case 0:

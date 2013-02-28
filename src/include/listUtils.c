@@ -6,7 +6,7 @@
 #include <strings.h>
 #include <stdio.h>
  
-#define PAYLOAD_SIZE 65000 /* Careful! There might be an error as "Message too long" */
+#define PAYLOAD_SIZE 4000 /* Careful! There might be an error as "Message too long" */
 #define TRUE 1
 #define FALSE 0
 
@@ -112,20 +112,22 @@ Node *searchNodeById(Node *head, int id){
 
 boolean insertNodeById(Node *head, Node *new){
 	/* Start from the first real node */
-	boolean present = FALSE; /* For efficiency */
+	boolean present = FALSE;
 	Node *iter = head->next;
-	while (iter != head && iter->packet->id < new->packet->id){
-		if (iter != head && iter->packet->id == new->packet->id){
+	while (iter != head){
+		if (iter->packet->id == new->packet->id){
 			present = TRUE;
 			break;
+		} else if (iter->packet->id > new->packet->id){
+			break; /* Position found */
 		}
 		iter = iter->next;
 	}
 	if (!present){
-		iter->prev->next = new;
-		new->prev = iter->prev;
-		iter->prev = new;
 		new->next = iter;
+		new->prev = iter->prev;
+		iter->prev->next = new;
+		iter->prev = new;
 		new->head = head;
 		head->length += 1;
 		return TRUE;

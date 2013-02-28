@@ -30,7 +30,7 @@ socklen_t destLen = sizeof(dest);
 Node *toAck, *ackD; /* List heads */
 Node *iter, *current; /* Simple iterators */
 boolean result; /* Simple container for results */
-int lastAckId = 0;
+int lastSentId = 0;
 boolean finalize = FALSE;
 
 
@@ -51,23 +51,39 @@ void ackPkt(Node *current){
 	ack.id = 0;
 	ack.type = 'B';
 	sprintf(ack.body, "%d%c", current->packet->id, '\0');
-	lastAckId = current->packet->id;	
 	printf("Sending ack for ID %d\n", current->packet->id);
 	/* Since we have to send on a different port we can't use the default binding, sendto is mandatory */
 	sendto(ritardatore, &ack, sizeof(Pkt), 0, (struct sockaddr *)&to, toLen);
-	removeNode(current);
-	clearNode(current);
 }
 
-void sendAcks(Node *current){
+void sendToReceiver(Node *current){
 	if (current != NULL){
 		/* Don't send the ending packet! */
-		if (current->packet->id > lastAckId){
-			printf("Transmitted ID: %d, lastAckId: %d\n", current->packet->id, lastAckId);
+		printf("Receiving packet %d, lastSentId %d\n", current->packet->id, lastSentId);
+		if (current->packet->id == lastSentId+1){
 			sendCounter = send(receiver, current->packet->body, current->pktSize - HEADER_SIZE, 0); /* Only send the body! */
-			printf("Inviati %d byte!\n", sendCounter);
+			switch(sendCounter){
+				case 0:
+					break;
+					
+				case -1:
+					break;
+					
+				default:
+					/* If I can send the packet to the receiver I also have to remove it */
+					ackPkt(current);
+					removeNode(current);
+					clearNode(current);
+					lastSentId++;
+			}
+		} else {
+			/* In this case we just have to tell the psender not to send this packet again */
+			ackPkt(current);
+			if (current->packet->id <= lastSentId){
+				removeNode(current);
+				clearNode(current);
+			}
 		}
-		ackPkt(current);
 	}
 }
 
@@ -153,12 +169,14 @@ int main(){
 				recvCounter = recv(ritardatore, current->packet, sizeof(Pkt), 0);
 				printf("Received %d\n", current->packet->id);
 				if (recvCounter > 0){
-					printf("Letti %d byte\n", recvCounter);
 					current->pktSize = recvCounter;
 					if (strcmp(current->packet->body, endingBody) == 0){
 						finalize = TRUE;
-					} else if (!(result = insertNodeById(toAck, current))){
-						printf("Node %d already present, ignoring...\n", current->packet->id);
+					} else {
+						result = insertNodeById(toAck, current);
+						if (!result){
+							printf("Node %d already present, ignoring...\n", current->packet->id);
+						}
 					}
 					
 					/* printList(toAck); */
@@ -168,8 +186,8 @@ int main(){
 			/* Check if we can send data to the receiver */
 			if (FD_ISSET(receiver, &canWriteCopy)){
 				/* Scan the packets list */	
-				forEach(toAck, &sendAcks);
-				if (finalize){
+				forEach(toAck, &sendToReceiver);
+				if (finalize && toAck->length == 0){
 					/* CLOSE */
 					printf("TRANSMISSION COMPLETE!\n");
 					close(ritardatore);
