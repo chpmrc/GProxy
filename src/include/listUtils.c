@@ -39,7 +39,7 @@ Node *allocNode(int id, char type, char *body, int size){
 	packet->id = id;
 	packet->type = type;
 	if (body != NULL){
-		strncpy(packet->body, body, size);
+		memcpy(packet->body, body, size);
 		toAlloc->pktSize = size;
 	}
 	toAlloc->packet = packet;
