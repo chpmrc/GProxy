@@ -8,15 +8,16 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/select.h>
+#include <time.h>
 #include "include/globalUtils.c"
 #include "include/listUtils.c"
 
 /* MAIN STUFF */
-struct sockaddr_in to, from, dest; /* Indirizzo del socket locale e remoto del ritardatore e del receiver */ 
+struct sockaddr_in toRit, fromRit, dest; /* Indirizzo del socket locale e remoto del ritardatore e del receiver */ 
 int ritardatore, receiver; /* socket descriptor verso/da il ritardatore e verso receiver */
-char destAddress[] = "127.0.0.1"; unsigned short int destPort = 64000;
-char fromAddress[] = "0.0.0.0"; unsigned short int fromPort = 63000;
-char toAddress[] = "127.0.0.1"; unsigned short int toPort = 60000;
+char destAddress[] = "192.168.1.125"; unsigned short int destPort = 64000;
+char fromRitAddress[] = "0.0.0.0"; unsigned short int fromRitPort = 63000;
+char toRitAddress[] = "127.0.0.1"; unsigned short int toRitPort = 62000;
 
 /* UTILS */
 extern char *logFilePath;
@@ -24,14 +25,17 @@ char recvBuffer[PAYLOAD_SIZE], sendBuffer[PAYLOAD_SIZE];
 int trueOpt = 1, connectStatus;
 int sharedError; /* Variabile di riconoscimento errori condivisa, serve per quelle funzioni che non ritornano interi */
 int recvCounter, sendCounter; /* WARNING: don't use size_t since it's an unsigned numeric type! Not suitable for possible error return values (e.g. -1) */
-socklen_t toLen = sizeof(to);
+socklen_t toLen = sizeof(toRit);
 socklen_t destLen = sizeof(dest);
 
-Node *toAck, *ackD; /* List heads */
+Node *toAck; /* List heads */
 Node *iter, *current; /* Simple iterators */
 boolean result; /* Simple container for results */
 int lastSentId = 0;
 boolean finalize = FALSE;
+
+time_t startTime, endTime;
+boolean started = FALSE;
 
 
 
@@ -42,7 +46,7 @@ int selectResult;
 int maxFd;
 
 /**
- * Simply send an ack for the given packet and remove it from
+ * Simply send an ack for the given packet and remove it fromRit
  * the list
  */
 void ackPkt(Node *current){
@@ -53,7 +57,7 @@ void ackPkt(Node *current){
 	sprintf(ack.body, "%d%c", current->packet->id, '\0');
 	printf("Sending ack for ID %d\n", current->packet->id);
 	/* Since we have to send on a different port we can't use the default binding, sendto is mandatory */
-	sendto(ritardatore, &ack, sizeof(Pkt), 0, (struct sockaddr *)&to, toLen);
+	sendto(ritardatore, &ack, sizeof(Pkt), 0, (struct sockaddr *)&toRit, toLen);
 }
 
 void sendToReceiver(Node *current){
@@ -70,7 +74,7 @@ void sendToReceiver(Node *current){
 					break;
 					
 				default:
-					/* If I can send the packet to the receiver I also have to remove it */
+					/* If I can send the packet toRit the receiver I also have to remove it */
 					ackPkt(current);
 					removeNode(current);
 					clearNode(current);
@@ -87,7 +91,7 @@ void sendToReceiver(Node *current){
 	}
 }
 
-int main(){
+int main(int argc, char *argv[]){
 	
 	/* Initialize local structures */
 	toAck = allocHead();
@@ -108,36 +112,36 @@ int main(){
 	printf("[LOG] socket dal receiver correttamente creato!\n");
 	
 		
-	/* Initialize the address to be used to connect to the receiver */
+	/* Initialize the address toRit be used toRit connect toRit the receiver */
 	dest = getSocketAddress(destAddress, destPort);
 	if (sharedError){
 		printError("creazione dell'indirizzo associato al socket dal receiver fallita! Errore");
 	}
 	printf("[LOG] indirizzo associato al socket del receiver correttamente creato: %s:%d\n", destAddress, destPort);
 	/* Inizializzo la struttura per il socket in ricezione dal ritardatore */
-	from = getSocketAddress(fromAddress, fromPort);
+	fromRit = getSocketAddress(fromRitAddress, fromRitPort);
 	if (sharedError){
 		printError("creazione dell'indirizzo associato al socket dal ritardatore fallita! Errore");
 	}
-	printf("[LOG] indirizzo associato al socket dal ritardatore correttamente creato: %s:%d\n", fromAddress, fromPort);
+	printf("[LOG] indirizzo associato al socket dal ritardatore correttamente creato: %s:%d\n", fromRitAddress, fromRitPort);
 	/* Inizializzo la struttura per il socket in invio verso il ritardatore */
-	to = getSocketAddress(toAddress, toPort);
+	toRit = getSocketAddress(toRitAddress, toRitPort);
 	if (sharedError){
 		printError("creazione dell'indirizzo associato al socket verso il ritardatore fallita! Errore");
 	}
-	printf("[LOG] indirizzo associato al socket verso il ritardatore correttamente creato: %s:%d\n", toAddress, toPort);
+	printf("[LOG] indirizzo associato al socket verso il ritardatore correttamente creato: %s:%d\n", toRitAddress, toRitPort);
 	
 	/* BINDS AND CONNECTS */
 	
 	/* Lego il socket dal ritardatore ad un indirizzo in ricezione */
-	bind(ritardatore, (struct sockaddr *)&from, sizeof(from));
+	bind(ritardatore, (struct sockaddr *)&fromRit, sizeof(fromRit));
 	
 	/* First of all establish a connection with the dest (only one connection at a time is allowed) */
 	connectStatus = connect(receiver, (struct sockaddr *)&dest, destLen);
 	if (connectStatus < 0){
 		printError("There was an error with the connect(). See details below:");
 	}
-	printf("[LOG] Connected to Receiver! Waiting for data...\n");
+	printf("[LOG] Connected toRit Receiver! Waiting for data...\n");
 	
 	/* Add the sockets into the sets of descriptors */
 	FD_ZERO(&canRead); FD_ZERO(&canWrite);
@@ -147,12 +151,18 @@ int main(){
 	
 	/* Leggo i datagram */
 	while(TRUE){
-		/* Make a copy of the fd_set to avoid modifying the original one (struct copy) */
+		/* Make a copy of the fd_set toRit avoid modifying the original one (struct copy) */
 		canReadCopy = canRead;
 		canWriteCopy = canWrite;
 
-		/* Main (and only) point of blocking from now on */
+		/* Main (and only) point of blocking fromRit now on */
 		selectResult = select(maxFd+1, &canReadCopy, &canWriteCopy, NULL, NULL);
+		
+		/* Compute transmission time */
+		if (!started){
+			time(&startTime);
+			started = TRUE;
+		}
 		
 		/* Check for errors */
 		if (selectResult < 0){
@@ -162,28 +172,33 @@ int main(){
 		/* Check for active sockets */
 		if (selectResult > 0){
 				
-			/* Check if we can read data from the ritardatore */
+			/* Check if we can read data fromRit the ritardatore */
 			if (FD_ISSET(ritardatore, &canReadCopy)){
+				/* Create a dummy packet to store the real one */
 				current = allocNode(0, 'B', NULL, 0);
 				memset(current->packet, 0, sizeof(Pkt));
 				recvCounter = recv(ritardatore, current->packet, sizeof(Pkt), 0);
-				printf("Received %d\n", current->packet->id);
-				if (recvCounter > 0){
-					current->pktSize = recvCounter;
-					if (strcmp(current->packet->body, endingBody) == 0){
-						finalize = TRUE;
-					} else {
-						result = insertNodeById(toAck, current);
-						if (!result){
-							printf("Node %d already present, ignoring...\n", current->packet->id);
+				/* Distinguish between body packets and ICMP packets */
+				if (current->packet->type == 'B'){
+					printf("Received ID %d\n", current->packet->id);
+					if (recvCounter > 0){
+						current->pktSize = recvCounter;
+						if (strcmp(current->packet->body, endingBody) == 0){
+							printf("FINALIZING TRANSMISSION...\n");
+							finalize = TRUE;
+						} else {
+							result = insertNodeById(toAck, current);
+							if (!result){
+								printf("Node %d already present, ignoring...\n", current->packet->id);
+							}
 						}
 					}
-					
-					/* printList(toAck); */
+				} else {
+					/* TODO It's an ICMP packet from the Ritardatore, resend the ack */
 				}
 			}
 			
-			/* Check if we can send data to the receiver */
+			/* Check if we can send data toRit the receiver */
 			if (FD_ISSET(receiver, &canWriteCopy)){
 				/* Scan the packets list */	
 				forEach(toAck, &sendToReceiver);
@@ -192,6 +207,9 @@ int main(){
 					printf("TRANSMISSION COMPLETE!\n");
 					close(ritardatore);
 					close(receiver);
+					/* Report time */
+					time(&endTime);
+					printf("Packets received (size %d): %d | Time elapsed: %f\n", PAYLOAD_SIZE+HEADER_SIZE, lastSentId, difftime(endTime, startTime));
 					exit(0);
 				}
 			}

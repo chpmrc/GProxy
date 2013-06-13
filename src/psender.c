@@ -11,14 +11,18 @@
 #include "include/globalUtils.c"
 #include "include/listUtils.c"
 
-#define MAX_PACKETS 10
+/* Operation indices and constants */
+#define MAX_OPS 10
+#define INIT_OPS 0
+#define RECV_SENDER 0
+#define CHECK_RITARDATORE 1
 
 /* MAIN STUFF */
-struct sockaddr_in to, from, source, sourceClient; /* Indirizzo del socket locale e remoto del ritardatore e del sender */ 
+struct sockaddr_in toRit, fromRit, source, sourceClient; /* Indirizzo del socket locale e remoto del ritardatore e del sender */ 
 int ritardatore, sender, connectedSender; /* socket descriptor verso/da il ritardatore e dal sender */
 char sourceAddress[] = "0.0.0.0"; unsigned short int sourcePort = 59000;
-char fromAddress[] = "0.0.0.0"; unsigned short int fromPort = 60000;
-char toAddress[] = "127.0.0.1"; unsigned short int toPort = 63000;
+char fromRitAddress[] = "0.0.0.0"; unsigned short int fromRitPort = 60000;
+char toRitAddress[] = "127.0.0.1"; unsigned short int toRitPort = 61000;
 
 /* DATA STRUCTURES AND LIST HEADS */
 char recvBuffer[PAYLOAD_SIZE];
@@ -33,8 +37,10 @@ int readCounter,
 	sentCounter, 
 	packetsRead, 
 	currentId;
-socklen_t toLen = sizeof(to);
+socklen_t toLen = sizeof(toRit);
 socklen_t sourceClientLen = sizeof(sourceClient);
+int opCounter[] = {INIT_OPS, MAX_OPS}; /* Used to count how many times an operation has been done (e.g. sending a packet, reading a packet from the sender ecc.) */
+int turn = RECV_SENDER; /* Reading from the sender has more priority */
 
 boolean finalize = FALSE;
 
@@ -46,16 +52,65 @@ int maxFd;
 
 void sendPacket(Node *node){
 	Pkt *pkt = node->packet;
-	sentCounter = sendto(ritardatore, pkt, node->pktSize, 0, (struct sockaddr *)&to, sizeof(to));
+	sentCounter = sendto(ritardatore, pkt, node->pktSize, 0, (struct sockaddr *)&toRit, sizeof(toRit));
 	if (sentCounter < 0){
 		perror("There was an error with sendto()");
 		exit(1);
 	} else {
 		printf("Sent ID %d\n", pkt->id);
+		if (pkt->id > 1000){
+			sleep(60);
+		}
 		if (strcmp(pkt->body, endingBody) == 0){
 			close(ritardatore);
 			exit(0);
 		}
+	}
+}
+
+void receiveFromSender(){
+	/* Fill the buffer */
+	readCounter = recv(connectedSender, recvBuffer, PAYLOAD_SIZE, 0);
+	/* Check cases */
+	switch(readCounter){
+		case 0:
+			/* Tell the receiver this is the last packet */
+			finalize = TRUE;
+			break;
+			
+		case -1:
+			printError("There was an error while reading data from the sender");
+			break;
+			
+		default:
+			/* Build a node and append toRit the toSend list */
+			current = allocNode(currentId, 'B', recvBuffer, readCounter+HEADER_SIZE);
+			appendNode(toAck, current);
+			currentId++;
+	}				
+	/* Here we have to scan the list and send its packets */
+	forEach(toAck, &sendPacket);
+}
+
+void checkRitardatore(){
+	readCounter = recv(ritardatore, &currentAck, sizeof(Pkt), MSG_DONTWAIT);
+	/* Check the type of the packet */
+	if (currentAck.type == 'B'){
+		/* If we receive a body packet it must be an ack fromRit the preceiver */
+		printf("Received ACK for ID: %s\n", currentAck.body);
+		current = removeNodeById(toAck, atoi(currentAck.body));
+		clearNode(current);
+		/* If we reached the end of the transmission send the final packet */
+		if (finalize && toAck->length == 0){
+			/* We can send the ending packet only when there are no packets left toRit be sent */
+			printf("FINALIZING TRANSMISSION...\n");
+			endingNode = allocNode(0, 'B', endingBody, strlen(endingBody)+HEADER_SIZE+1);
+			sendPacket(endingNode);
+			clearNode(endingNode);
+			printf("TRANSMISSION COMPLETE!\n");
+		}
+	} else {
+		/* TODO Otherwise we received an ICMP packet fromRit the ritardatore */
 	}
 }
 
@@ -90,22 +145,22 @@ int main(){
 	}
 	printf("[LOG] indirizzo associato al socket dal sender correttamente creato: %s:%d\n", sourceAddress, sourcePort);
 	/* Inizializzo la struttura per il socket in ricezione dal ritardatore */
-	from = getSocketAddress(fromAddress, fromPort);
+	fromRit = getSocketAddress(fromRitAddress, fromRitPort);
 	if (sharedError){
 		printError("creazione dell'indirizzo associato al socket dal ritardatore fallita! Errore");
 	}
-	printf("[LOG] indirizzo associato al socket dal ritardatore correttamente creato: %s:%d\n", fromAddress, fromPort);
+	printf("[LOG] indirizzo associato al socket dal ritardatore correttamente creato: %s:%d\n", fromRitAddress, fromRitPort);
 	/* Inizializzo la struttura per il socket in invio verso il ritardatore */
-	to = getSocketAddress(toAddress, toPort);
+	toRit = getSocketAddress(toRitAddress, toRitPort);
 	if (sharedError){
 		printError("creazione dell'indirizzo associato al socket verso il ritardatore fallita! Errore");
 	}
-	printf("[LOG] indirizzo associato al socket verso il ritardatore correttamente creato: %s:%d\n", toAddress, toPort);
+	printf("[LOG] indirizzo associato al socket verso il ritardatore correttamente creato: %s:%d\n", toRitAddress, toRitPort);
 	
 	/* BINDS AND LISTENS */
 	
 	/* Lego il socket dal ritardatore ad un indirizzo in ricezione */
-	bind(ritardatore, (struct sockaddr *)&from, sizeof(from));
+	bind(ritardatore, (struct sockaddr *)&fromRit, sizeof(fromRit));
 	
 	/* Lego il socket dal sender ad un indirizzo in ricezione */
 	bind(sender, (struct sockaddr *)&source, sizeof(source));
@@ -127,10 +182,10 @@ int main(){
 	
 	/* Leggo i datagram */
 	while(TRUE){
-		/* Make a copy of the fd_set to avoid modifying the original one */
+		/* Make a copy of the fd_set toRit avoid modifying the original one */
 		canReadCopy = canRead;
 		
-		/* Main (and only) point of blocking from now on */
+		/* Main (and only) point of blocking fromRit now on */
 		selectResult = select(maxFd+1, &canReadCopy, NULL, NULL, NULL);
 		
 		/* Check for errors */
@@ -140,54 +195,29 @@ int main(){
 		/* Check for active sockets */
 		if (selectResult > 0){
 		
-			/* Check if we can receive data from the sender */
+			/* Check if we can receive data fromRit the sender */
 			if (FD_ISSET(connectedSender, &canReadCopy)){
-				/* Here we have to build n packets and put them into a list */
-				/* Fill the buffer */
-				readCounter = recv(connectedSender, recvBuffer, PAYLOAD_SIZE, 0);
-				/* Check cases */
-				switch(readCounter){
-					case 0:
-						finalize = TRUE;
-						break;
-						
-					case -1:
-						/* ERROR */
-						break;
-						
-					default:
-						/* Build a node and append to the toSend list */
-						current = allocNode(currentId, 'B', recvBuffer, readCounter+HEADER_SIZE);
-						appendNode(toAck, current);
-						/* printList(toAck); */ /* DEBUG */
-						currentId++;
-						
-				}				
-				
-				/* Here we have to scan the list and send its packets */
-				forEach(toAck, &sendPacket);
-							
+				/* Check if it's our turn */
+				if (turn == RECV_SENDER){
+					receiveFromSender();
+					opCounter[RECV_SENDER] += 1;
+					if (opCounter[RECV_SENDER] >= MAX_OPS){
+						opCounter[CHECK_RITARDATORE] = 0;
+						turn = CHECK_RITARDATORE;
+					}					
+				}
 			}
 			
-			/* Check if we can receive data from the ritardatore */
+			/* Check if we can receive data fromRit the ritardatore */
 			if (FD_ISSET(ritardatore, &canReadCopy)){
-				readCounter = recv(ritardatore, &currentAck, sizeof(Pkt), MSG_DONTWAIT);
-				/* Check the type of the packet */
-				if (currentAck.type == 'B'){
-					/* If we receive a body packet it must be an ack from the preceiver */
-					printf("Received ACK for ID: %s\n", currentAck.body);
-					current = removeNodeById(toAck, atoi(currentAck.body));
-					clearNode(current);
-					/* If we reached the end of the transmission send the final packet */
-					if (finalize && toAck->length == 0){
-						/* We can send the ending packet only when there are no packets left to be sent */
-						printf("Finalizing transmission...\n");
-						endingNode = allocNode(0, 'B', endingBody, strlen(endingBody)+HEADER_SIZE+1);
-						sendPacket(endingNode);
-						clearNode(endingNode);
-					}
-				} else {
-					/* Otherwise we received an ICMP packet from the ritardatore */
+				/* Check if it's our turn */
+				if (turn == CHECK_RITARDATORE){
+					checkRitardatore();
+					opCounter[CHECK_RITARDATORE] += 1;
+					if (opCounter[CHECK_RITARDATORE] >= MAX_OPS){
+						opCounter[RECV_SENDER] = 0;
+						turn = RECV_SENDER;
+					}					
 				}
 			}			
 		}
