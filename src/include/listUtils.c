@@ -5,8 +5,8 @@
 #include <stdlib.h>
 #include <strings.h>
 #include <stdio.h>
- 
-#define PAYLOAD_SIZE 65000 /* Careful! There might be an error as "Message too long" */
+
+#define PAYLOAD_SIZE 65000 /* Careful! There might be an error as "Message too long" if this number is increased */
 #define TRUE 1
 #define FALSE 0
 
@@ -29,7 +29,8 @@ typedef struct Node {
 Node *allocNode(int id, char type, char *body, int size){
 	Node *toAlloc = (Node *)malloc(sizeof(Node));
 	Pkt *packet = (Pkt *)malloc(sizeof(Pkt));
-	if (toAlloc == NULL){
+	/* TODO Dynamic allocation of the body */
+	if (toAlloc == NULL || packet == NULL){
 		perror("Error with malloc()");
 	}
 	toAlloc->next = toAlloc;
@@ -58,6 +59,10 @@ Node *allocHead(){
 	return toAlloc;
 }
 
+void clearHead(Node *head){
+	free(head);
+}
+
 Pkt *getPkt(Node *node){
 	return node->packet;
 }
@@ -76,7 +81,6 @@ void appendNode(Node *head, Node *new){
 Node *removeNode(Node *toRemove){
 	if (toRemove != NULL){
 		Node *head = toRemove->head;
-		if (toRemove == NULL) return NULL;
 		if (toRemove->prev != NULL){
 			toRemove->prev->next = toRemove->next;
 		}
@@ -146,12 +150,17 @@ void printNode(Node *n){
 }
 
 /* Foreach implementation with callback */
-void forEach(Node *head, void (*callbackPtr)(Node *)){
+void forEach(Node *head, void (*callbackPtr)(Node *), int maxScans){
 	Node *iter = head->next, *next;
+	int scans = 0;
 	while (iter != head){
+		if (maxScans != 0 && scans >= maxScans){
+			break;
+		}
 		next = iter->next;
 		(*callbackPtr)(iter);
 		iter = next; /* Avoid segmentation fault if the callback modifies the list */
+		scans++;
 	}
 }
 

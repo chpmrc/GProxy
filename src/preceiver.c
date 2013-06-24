@@ -12,45 +12,197 @@
 #include "include/globalUtils.c"
 #include "include/listUtils.c"
 
-/* MAIN STUFF */
+
+/* Shared */
+extern int maxPackets,
+			payload,
+			allocCounter;
+
+/* Network */
 struct sockaddr_in toRit, fromRit, dest; /* Indirizzo del socket locale e remoto del ritardatore e del receiver */ 
 int ritardatore, receiver; /* socket descriptor verso/da il ritardatore e verso receiver */
-char destAddress[] = "192.168.1.125"; unsigned short int destPort = 64000;
-char fromRitAddress[] = "0.0.0.0"; unsigned short int fromRitPort = 63000;
-char toRitAddress[] = "127.0.0.1"; unsigned short int toRitPort = 62000;
-
-/* UTILS */
-extern char *logFilePath;
-char recvBuffer[PAYLOAD_SIZE], sendBuffer[PAYLOAD_SIZE];
-int trueOpt = 1, connectStatus;
-int sharedError; /* Variabile di riconoscimento errori condivisa, serve per quelle funzioni che non ritornano interi */
-int recvCounter, sendCounter; /* WARNING: don't use size_t since it's an unsigned numeric type! Not suitable for possible error return values (e.g. -1) */
 socklen_t toLen = sizeof(toRit);
 socklen_t destLen = sizeof(dest);
 
-Node *toAck; /* List heads */
-Node *iter, *current; /* Simple iterators */
-boolean result; /* Simple container for results */
-int lastSentId = 0;
-boolean finalize = FALSE;
+char destAddress[] = "127.0.0.1",
+	fromRitAddress[] = "0.0.0.0", 
+	toRitAddress[] = "192.168.1.125";
 
+unsigned short int ritPorts[] = {62000, 62001, 62002},
+					destPort = 64000,
+					fromRitPort = 63000,
+					toRitPort;
+
+
+
+/* Utils */
+char *recvBuffer, *sendBuffer;
+int trueOpt = 1, 
+	connectStatus,
+	sharedError, /* Shared variables that simulates errno for those functions that don't return a value in case of error */
+	recvCounter, sendCounter, /* WARNING: don't use size_t since it's an unsigned numeric type! Not suitable for possible error return values (e.g. -1) */
+	counter, /* Generic counter */
+	result, /* Used to store temporary return values (e.g. for syscalls) */
+	lastSentId = 1; /* 0 is only for maintainance */
+	int channel = 0; /* Ritardatore's channel currently in use */
+	
+Node *toSend, *toAck; /* List heads, switch between two lists */
+Node *current; /* Used to store temporary nodes */
+boolean finalize = FALSE; /* Set to true when the finalizing packet has been received from the ritardatore */
+		
+/* Profiling */
 time_t startTime, endTime;
-boolean started = FALSE;
+boolean started = FALSE,
+		timedOut = FALSE;
 
 
-
-/* SELECT RELATED */
+/* Select */
 fd_set canRead, canWrite, canExcept, canReadCopy, canWriteCopy, canExceptCopy;
-struct timeval timeout = { 2, 0 };
+struct timeval timeout = { 5, 0 };
 int selectResult;
 int maxFd;
 
+/* >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> */
+
 /**
- * Simply send an ack for the given packet and remove it fromRit
- * the list
+ * Functions headers
+ */
+
+void ackPkt(Node *current);
+
+void ackPacket(Node *current);
+
+void sendToReceiver(Node *current);
+
+void receiveFromPsender();
+
+void init();
+
+void terminate();
+
+/* >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> */
+
+/**
+ * Main flow
+ */
+
+int main(int argc, char *argv[]){
+	printf("[Call] main\n");
+	
+	/* Initialize the connection parameters */
+	if (argc < 3){
+		printf("Usage: preceiver RITARDATORE_ADDRESS MAX_PACKETS\n");
+		exit(1);
+	} else {
+		strcpy(toRitAddress, argv[1]);
+		/*payload = atoi(argv[3]);*/
+		payload = PAYLOAD_SIZE;
+		maxPackets = atoi(argv[2]);
+		recvBuffer = (char *)malloc(sizeof(char)*payload);
+		sendBuffer = (char *)malloc(sizeof(char)*payload);
+		if ((int)recvBuffer == -1 || (int)sendBuffer == -1){
+			printError("There was an error with malloc()\n");
+		}
+	}
+	
+	/* Initialize all the variables */
+	init();
+	
+	while(TRUE){
+		
+		/* Make a copy of the fd_set toRit avoid modifying the original one (struct copy) */
+		canReadCopy = canRead;
+		canWriteCopy = canWrite;
+		
+		/* If both the lists are empty and finalize is true, terminate */
+		if (finalize && toSend->length == 0 && toAck->length == 0){
+			terminate();
+		}
+		
+		/* Try to send the collected packets to the receiver */
+		forEach(toSend, &sendToReceiver, maxPackets);
+		
+		/* Ack the already sent packets */
+		forEach(toAck, &ackPacket, maxPackets);
+		
+		/* Main (and only) point of blocking from now on */
+		selectResult = select(maxFd+1, &canReadCopy, NULL, NULL, &timeout);
+		
+		/* Check for errors */
+		if (selectResult < 0){
+			printError("There was an error with the select function!");
+		} else
+		
+		/* Check for active sockets */
+		if (selectResult > 0){
+			
+			/* Compute transmission time */
+			if (!started){
+				time(&startTime);
+				started = TRUE;
+			}
+			
+			/* Check if we can read data from the ritardatore */
+			if (FD_ISSET(ritardatore, &canReadCopy)){
+				/* Try to read maxPackets */
+				for (counter = 0; counter <= maxPackets; counter++){
+					receiveFromPsender();
+				}
+			}
+		} else {
+			
+			/* Timeout expired, maybe the psender is dead,
+			 * just finish sending ack and packets to receiver and terminate */
+			timedOut = TRUE;
+		}
+	}
+}
+
+/* >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> */
+
+/** 
+ * Functions implementation 
+ */
+ 
+/**
+ * Close the used sockets and print profiling info
+ */
+void terminate(){
+	printf("[Call] terminate\n");
+	close(ritardatore);
+	close(receiver);
+	/* Report time */
+	time(&endTime);
+	/* Remove the timeout seconds if the connection has timed out */
+	if (timedOut){
+		endTime -= timeout.tv_sec;
+	}
+	printf("Transfer complete!\nPackets received (size %d): %d | Time elapsed: %f\n", payload+HEADER_SIZE, lastSentId, difftime(endTime, startTime));
+	free(recvBuffer);
+	free(sendBuffer);
+	exit(0);
+}
+
+/**
+ * Send an ack for the given packet and remove it from the toAck list.
+ */
+void ackPacket(Node *current){
+	printf("[Call] ackPacket\n");
+	ackPkt(current);
+	/* If the last packet has been sent it means the connection is (hopefully) going to terminate soon */
+	if (current->packet->id == 0){
+		finalize = TRUE;
+	}
+	removeNode(current);
+	clearNode(current);
+}
+
+/**
+ * Send an ack for the given packet (id).
  */
 void ackPkt(Node *current){
 	Pkt ack; /* Used to send ack to the psender */
+	printf("[Call] ackPkt\n");
 	/* Build and send the ack */
 	ack.id = 0;
 	ack.type = 'B';
@@ -60,40 +212,107 @@ void ackPkt(Node *current){
 	sendto(ritardatore, &ack, sizeof(Pkt), 0, (struct sockaddr *)&toRit, toLen);
 }
 
+/**
+ * If the packet's id is equal to the one we still have to send: 
+ * 		send it.
+ * If it's lower it means the psender didn't receive the ack: 
+ * 		ack it but don't send it to the receiver.
+ * In any case ack the packet (we don't need the psender to send it again).
+ * If the packet is the final one set the finalize variable to true.
+ * @param current The node containing the packet to send
+ */
 void sendToReceiver(Node *current){
+	printf("[Call] sendToReceiver\n");
 	if (current != NULL){
-		/* Don't send the ending packet! */
-		printf("Receiving packet %d, lastSentId %d\n", current->packet->id, lastSentId);
-		if (current->packet->id == lastSentId+1){
+		/* NOTICE: the finalizing packet will never be sent cause its ID is always 0 */
+		if (current->packet->id == lastSentId){
 			sendCounter = send(receiver, current->packet->body, current->pktSize - HEADER_SIZE, 0); /* Only send the body! */
 			switch(sendCounter){
 				case 0:
+					/* Can't happen since the send is blocking */
 					break;
 					
 				case -1:
+					printError("There was an error while sending a packet to the receiver");
 					break;
 					
 				default:
-					/* If I can send the packet toRit the receiver I also have to remove it */
-					ackPkt(current);
-					removeNode(current);
-					clearNode(current);
+					/* The packet has been correctly sent to the receiver. Remove it from the ones to send */
 					lastSentId++;
-			}
-		} else {
-			/* In this case we just have to tell the psender not to send this packet again */
-			ackPkt(current);
-			if (current->packet->id <= lastSentId){
-				removeNode(current);
-				clearNode(current);
+					current = removeNode(current);
+					insertNodeById(toAck, current);
 			}
 		}
 	}
 }
 
-int main(int argc, char *argv[]){
+/**
+ * Receive the packet from the ritardatore.
+ * If it's type is B:
+ * 		Insert the packet in the list of the ones to send/ack keeping the list sorted.
+ * If it's type is I:
+ * 		It's an ICMP from the ritardatore, switch port.
+ */
+void receiveFromPsender(){
+	printf("[Call] receiveFromPsender\n");
+	
+	/* Create a dummy packet to store the real one */
+	current = allocNode(0, 'B', NULL, 0);
+	memset(current->packet, 0, sizeof(Pkt));
+	recvCounter = recv(ritardatore, current->packet, sizeof(Pkt), MSG_DONTWAIT);
+	
+	/* Distinguish between body packets and ICMP packets */
+	if (recvCounter > 0){
+		if (current->packet->type == 'B'){
+			
+			/* We received a packet for the receiver */
+			printf("Received ID %d\n", current->packet->id);
+			current->pktSize = recvCounter;
+			
+			/* If the packet has already been received once just ack it */
+			if (current->packet->id >= lastSentId){
+				/* Here length will be increased */
+				insertNodeById(toSend, current);
+			} else {
+				if (toAck->length < maxPackets){
+					insertNodeById(toAck, current);
+				} else {
+					clearNode(current);
+				}
+			}
+			
+		} else {
+			/* We received an ICMP from the ritardatore: switch port */
+			channel = (channel + 1) % 3;
+			toRitPort = ritPorts[channel];
+			toRit = getSocketAddress(toRitAddress, toRitPort);
+			if (sharedError){
+				printError("Failed to create a new address for the socket to the ritardatore");
+			}
+			printf("Port switched to %d\n", toRitPort);
+			clearNode(current);
+		}
+	} else if (recvCounter < 0 && (errno != EAGAIN || errno != EWOULDBLOCK)) {
+		clearNode(current);
+		printError("There was an error with recv");
+	} else {
+		/* Nothing to read, just clear the allocated node */
+		printf("Nothing to read from the ritardatore...\n");
+		clearNode(current);
+	}
+}
+
+
+/**
+ * Init all the variables.
+ */
+void init(){
+	printf("[Call] init\n");
+	/* Initialize ports */
+	toRitPort = ritPorts[0];
 	
 	/* Initialize local structures */
+	toSend = allocHead();
 	toAck = allocHead();
 	
 	/* Cambia il path del file di log */
@@ -144,75 +363,7 @@ int main(int argc, char *argv[]){
 	printf("[LOG] Connected toRit Receiver! Waiting for data...\n");
 	
 	/* Add the sockets into the sets of descriptors */
-	FD_ZERO(&canRead); FD_ZERO(&canWrite);
-	FD_SET(receiver, &canWrite);
+	FD_ZERO(&canRead);
 	FD_SET(ritardatore, &canRead);
-	maxFd = (receiver < ritardatore)? ritardatore : receiver;
-	
-	/* Leggo i datagram */
-	while(TRUE){
-		/* Make a copy of the fd_set toRit avoid modifying the original one (struct copy) */
-		canReadCopy = canRead;
-		canWriteCopy = canWrite;
-
-		/* Main (and only) point of blocking fromRit now on */
-		selectResult = select(maxFd+1, &canReadCopy, &canWriteCopy, NULL, NULL);
-		
-		/* Compute transmission time */
-		if (!started){
-			time(&startTime);
-			started = TRUE;
-		}
-		
-		/* Check for errors */
-		if (selectResult < 0){
-			printError("There was an error with the select function!");
-		}
-		
-		/* Check for active sockets */
-		if (selectResult > 0){
-				
-			/* Check if we can read data fromRit the ritardatore */
-			if (FD_ISSET(ritardatore, &canReadCopy)){
-				/* Create a dummy packet to store the real one */
-				current = allocNode(0, 'B', NULL, 0);
-				memset(current->packet, 0, sizeof(Pkt));
-				recvCounter = recv(ritardatore, current->packet, sizeof(Pkt), 0);
-				/* Distinguish between body packets and ICMP packets */
-				if (current->packet->type == 'B'){
-					printf("Received ID %d\n", current->packet->id);
-					if (recvCounter > 0){
-						current->pktSize = recvCounter;
-						if (strcmp(current->packet->body, endingBody) == 0){
-							printf("FINALIZING TRANSMISSION...\n");
-							finalize = TRUE;
-						} else {
-							result = insertNodeById(toAck, current);
-							if (!result){
-								printf("Node %d already present, ignoring...\n", current->packet->id);
-							}
-						}
-					}
-				} else {
-					/* TODO It's an ICMP packet from the Ritardatore, resend the ack */
-				}
-			}
-			
-			/* Check if we can send data toRit the receiver */
-			if (FD_ISSET(receiver, &canWriteCopy)){
-				/* Scan the packets list */	
-				forEach(toAck, &sendToReceiver);
-				if (finalize && toAck->length == 0){
-					/* CLOSE */
-					printf("TRANSMISSION COMPLETE!\n");
-					close(ritardatore);
-					close(receiver);
-					/* Report time */
-					time(&endTime);
-					printf("Packets received (size %d): %d | Time elapsed: %f\n", PAYLOAD_SIZE+HEADER_SIZE, lastSentId, difftime(endTime, startTime));
-					exit(0);
-				}
-			}
-		}
-	}
+	maxFd = ritardatore;
 }

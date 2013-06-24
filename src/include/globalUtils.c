@@ -18,12 +18,18 @@
 #define SOCKERROR -1
 #define HEADER_SIZE 5
 
+/* Debug */
+int allocCounter = 0;
+
 /* Shared values (PROTOCOL) */
 char endingBody[] = "inanisonoblu";
 
 int sharedError; /* errno-like variable */
 char *logFilePath = "./log.txt"; /* Log is also saved to a file */
 int firstExecution = TRUE; /* At the beginning do something, then something else */
+
+int maxPackets,
+	payload;
 
 /**
  * @param {int} type

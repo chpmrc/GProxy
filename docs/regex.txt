@@ -1,0 +1,4 @@
+# Add a print of the function's name as the first line of each function
+Find: ((\w+) (\w+)\(.*\)\{)
+
+Replace: \1\n\tprintf("[Call] \3\\n");
