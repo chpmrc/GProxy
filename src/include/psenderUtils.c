@@ -40,7 +40,8 @@ unsigned int currentId = 1; /* 0 is reserved for maintainance! */
 	
 /* Select utils */
 fd_set canRead, canReadCopy;
-struct timeval timeout = { 10, 0 };
+struct timeval origTimeout = { 10, 0 },
+				actualTimeout;
 int selectResult;
 int maxFd;
 

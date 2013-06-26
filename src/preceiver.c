@@ -59,8 +59,11 @@ int main(int argc, char *argv[]){
 		/* Ack the already sent packets */
 		forEach(toAck, &ackPacket, maxPackets);
 		
+		/* Reinitialize timeout, struct copy */
+		actualTimeout = origTimeout;
+		
 		/* Main (and only) point of blocking from now on */
-		selectResult = select(maxFd+1, &canReadCopy, NULL, NULL, &timeout);
+		selectResult = select(maxFd+1, &canReadCopy, NULL, NULL, &actualTimeout);
 		
 		/* Check for errors */
 		if (selectResult < 0){

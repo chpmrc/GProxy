@@ -47,9 +47,12 @@ int main(int argc, char *argv[]){
 		
 		/* Here we have to scan the list and send its packets to get the related ack */
 		forEach(toSend, &sendPacket, maxPackets); /* Can't do this after the select cause it might block! */
+		
+		/* Reinitialize timeout, struct copy */
+		actualTimeout = origTimeout;
 
 		/* Main (and only) point of blocking fromRit now on */
-		selectResult = select(maxFd+1, &canReadCopy, NULL, NULL, &timeout);
+		selectResult = select(maxFd+1, &canReadCopy, NULL, NULL, &actualTimeout);
 		
 		/* Check for errors */
 		if (selectResult < 0){
@@ -58,7 +61,7 @@ int main(int argc, char *argv[]){
 
 		/* Check for active sockets */
 		if (selectResult > 0){
-		
+			
 			/* Check if we can receive data from the sender */
 			if (FD_ISSET(connectedSender, &canReadCopy)){
 				
