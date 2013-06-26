@@ -6,7 +6,7 @@
 #include <strings.h>
 #include <stdio.h>
 
-#define PAYLOAD_SIZE 65005 /* Careful! There might be an error as "Message too long" if this number is increased */
+#define PAYLOAD_SIZE 40000 /* Careful! There might be an error as "Message too long" if this number is increased */
 #define TRUE 1
 #define FALSE 0
 

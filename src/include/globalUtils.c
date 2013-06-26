@@ -17,6 +17,7 @@
 #define FALSE 0
 #define SOCKERROR -1
 #define HEADER_SIZE 5
+#define IP_ADDR_STRLEN 16
 
 /* Debug */
 int allocCounter = 0;

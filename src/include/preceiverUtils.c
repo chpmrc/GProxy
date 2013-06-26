@@ -5,9 +5,9 @@ int ritardatore, receiver; /* socket descriptor verso/da il ritardatore e verso 
 socklen_t toLen = sizeof(toRit);
 socklen_t destLen = sizeof(dest);
 
-char destAddress[] = "127.0.0.1",
-	fromRitAddress[] = "0.0.0.0", 
-	toRitAddress[] = "192.168.1.125";
+char destAddress[IP_ADDR_STRLEN] = "127.0.0.1",
+	fromRitAddress[IP_ADDR_STRLEN] = "0.0.0.0", 
+	toRitAddress[IP_ADDR_STRLEN];
 
 unsigned short int ritPorts[] = {62000, 62001, 62002},
 					destPort = 64000,
@@ -26,8 +26,9 @@ int trueOpt = 1,
 	recvCounter, sendCounter, /* WARNING: don't use size_t since it's an unsigned numeric type! Not suitable for possible error return values (e.g. -1) */
 	counter, /* Generic counter */
 	result, /* Used to store temporary return values (e.g. for syscalls) */
-	lastSentId = 1; /* 0 is only for maintainance */
-	int channel = 0; /* Ritardatore's channel currently in use */
+	channel = 0; /* Ritardatore's channel currently in use */
+	
+unsigned int lastSentId = 1; /* 0 is reserved for maintainance! */
 	
 Node *toSend, *toAck; /* List heads, switch between two lists */
 Node *current; /* Used to store temporary nodes */
@@ -139,7 +140,8 @@ void ackPkt(Node *current){
 	/* Build and send the ack */
 	ack.id = 0;
 	ack.type = 'B';
-	sprintf(ack.body, "%d%c", current->packet->id, '\0');
+	/* Convert the ID's endianess */
+	sprintf(ack.body, "%d%c", htonl(current->packet->id), '\0');
 	printf("Sending ack for ID %d\n", current->packet->id);
 	/* Since we have to send on a different port we can't use the default binding, sendto is mandatory */
 	sendto(ritardatore, &ack, sizeof(Pkt), 0, (struct sockaddr *)&toRit, toLen);
@@ -202,16 +204,29 @@ void sendToReceiver(Node *current){
  * 		It's an ICMP from the ritardatore, switch port.
  */
 void receiveFromPsender(){
+	
+	int maxOps = 100, /* After 100 failed recv it means there is something wrong */
+		opsCounter = 0;
+		
 	printf("[Call] receiveFromPsender\n");
 	
 	/* Create a dummy packet to store the real one */
 	current = allocNode(0, 'B', NULL, 0);
 	memset(current->packet, 0, sizeof(Pkt));
-	recvCounter = recv(ritardatore, current->packet, sizeof(Pkt), MSG_DONTWAIT);
+	
+	/* If the syscall has been interrupted just try again */
+	do {
+		recvCounter = recv(ritardatore, current->packet, sizeof(Pkt), MSG_DONTWAIT);
+		opsCounter++;
+	} while (recvCounter < 0 && errno != EINTR && opsCounter < maxOps);
 	
 	/* Distinguish between body packets and ICMP packets */
 	if (recvCounter > 0){
+
 		if (current->packet->type == 'B'){
+			
+			/* Change the endianess of the ID */
+			current->packet->id = ntohl(current->packet->id);
 			
 			/* We received a packet for the receiver */
 			printf("Received ID %d\n", current->packet->id);

@@ -1,3 +1,7 @@
 Localhost:
 	MAX_PACKETS (preceiver/psender): 20/25
 	PAYLOAD: 65005
+
+Ethernet:
+	MAX_PACKETS (preceiver/psender): 20/25
+	PAYLOAD: 40000

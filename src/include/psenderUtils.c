@@ -14,9 +14,9 @@ unsigned short int ritPorts[] = {61000, 61001, 61002}, /* Ports used by the Rita
 					fromRitPort = 60000, /* Address:port pair from the ritardatore */
 					toRitPort; /* Address:port pair to the ritardatore */
 					
-char sourceAddress[] = "0.0.0.0",
-	fromRitAddress[] = "0.0.0.0",
-	toRitAddress[] = "192.168.1.125";
+char sourceAddress[IP_ADDR_STRLEN] = "0.0.0.0",
+	fromRitAddress[IP_ADDR_STRLEN] = "0.0.0.0",
+	toRitAddress[IP_ADDR_STRLEN];
 	
 
 socklen_t toLen = sizeof(toRit);
@@ -32,10 +32,11 @@ boolean finalize = FALSE, /* Set to true when the finalizing packet has been sen
 		endingRead = FALSE; /* Set to true when there is no data left from the sender */
 		
 int sharedError; /* Shared variables that simulates errno for those functions that don't return a value in case of error */
-int currentId = 1, /* 0 is reserved for maintainance! */
-	counter, /* Generic counter */
+int counter, /* Generic counter */
 	result, /* Used to store temporary return values (e.g. for syscalls) */
 	channel = 0; /* Ritardatore's channel currently in use */
+	
+unsigned int currentId = 1; /* 0 is reserved for maintainance! */
 	
 /* Select utils */
 fd_set canRead, canReadCopy;
@@ -153,22 +154,30 @@ void terminate(){
 void receiveFromSender(){
 
 	/* Fill the buffer */
-	int readCounter = recv(connectedSender, recvBuffer, PAYLOAD_SIZE, 0);
+	int readCounter;
 	
 	printf("[Call] receiveFromSender\n");
 	
-	/* Check cases */
+	/* Execute the (blocking) recv while the error is just a OS interruption */
+	do {
+		readCounter = recv(connectedSender, recvBuffer, PAYLOAD_SIZE, 0);
+	} while (readCounter < 0 && errno != EINTR);
+
+	/* Check recv cases */
 	switch(readCounter){
 		case 0:
 			/* We finished reading data from the sender, now we only have to transmit it */
-			endingNode = allocNode(0, 'B', endingBody, strlen(endingBody)+HEADER_SIZE+1 /* trailing 0 */);
+			endingNode = allocNode(0, 'B', endingBody, strlen(endingBody)+HEADER_SIZE+1 /* string plus '\0' */);
 			appendNode(toSend, endingNode);
 			endingRead = TRUE;
 			closeSenderConnection();
 			break;
 			
 		case -1:
-			printError("There was an error while reading data from the sender");
+			/* If the syscall has been interrupted just gracefully exit and wait for the next call */
+			if (errno != EINTR){
+				printError("There was an error while reading data from the sender");
+			}
 			break;
 			
 		default:
@@ -196,9 +205,10 @@ void checkRitardatore(){
 	if (readCounter > 0){
 		/* Check the type of the packet */
 		if (currentAck.type == 'B'){
+			
 			/* If we receive a body packet it must be an ack from the preceiver */
-			current = removeNodeById(toSend, atoi(currentAck.body));
-			if (current == NULL) printf("CURRENT È NULL!\n");
+			current = removeNodeById(toSend, ntohl(atoi(currentAck.body)));
+			printf("Acking ID %d\n", ntohl(atoi(currentAck.body)));
 			clearNode(current);
 			
 		} else {
@@ -212,7 +222,7 @@ void checkRitardatore(){
 			printf("Port switched to %d\n", toRitPort);
 		}
 		
-	} else if (readCounter < 0) {
+	} else if (readCounter < 0 && (errno != EAGAIN || errno != EWOULDBLOCK)) {
 		printError("There was an error while receiving packets from the ritardatore\n");
 	}
 }
@@ -224,19 +234,27 @@ void checkRitardatore(){
 void sendPacket(Node *node){
 	
 	Pkt *pkt = node->packet;
+	int sentCounter;
+	
+	/* Convert to internet endianess on the fly */
+	pkt->id = htonl(pkt->id);
 	
 	/* Send the packet's body */
-	int sentCounter = sendto(ritardatore, pkt, node->pktSize, 0, (struct sockaddr *)&toRit, sizeof(toRit));
+	sentCounter = sendto(ritardatore, pkt, node->pktSize, 0, (struct sockaddr *)&toRit, sizeof(toRit));
 
 	printf("[Call] sendPacket\n");
 
 	if (sentCounter < 0){
 		printError("There was an error with sendto()");
 	} else {
-		printf("Sent ID %d\n", pkt->id);
 		/* If the finalizing packet has been sent set finalize to true */
 		if (pkt->id == 0){
 			finalize = TRUE;
 		}
 	}
+	
+	/* Convert back to host endianess */
+	pkt->id = ntohl(pkt->id);
+	
+	printf("Sent ID %d\n", pkt->id);
 }

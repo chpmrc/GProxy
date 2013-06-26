@@ -64,7 +64,10 @@ int main(int argc, char *argv[]){
 		
 		/* Check for errors */
 		if (selectResult < 0){
-			printError("There was an error with the select function!");
+			/* Check if the syscall has been interrupted */
+			if (errno != EINTR){
+				printError("There was an error with the select function!");
+			}
 		} else
 		
 		/* Check for active sockets */
