@@ -85,7 +85,7 @@ int main(int argc, char *argv[]){
 			/* Check if we can read data from the ritardatore */
 			if (FD_ISSET(ritardatore, &canReadCopy)){
 				/* Try to read maxPackets */
-				for (counter = 0; counter <= maxPackets; counter++){
+				for (counter = 0; counter < maxPackets; counter++){
 					receiveFromPsender();
 				}
 			}
@@ -93,7 +93,7 @@ int main(int argc, char *argv[]){
 			
 			/* Timeout expired, maybe the psender is dead,
 			 * just finish sending ack and packets to receiver and terminate */
-			timedOut = TRUE;
+			timedOut = TRUE; /* This is used just to count the timeout in the profiling */
 		}
 	}
 }

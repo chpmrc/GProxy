@@ -223,7 +223,7 @@ void checkRitardatore(){
 			printf("Port switched to %d\n", toRitPort);
 		}
 		
-	} else if (readCounter < 0 && (errno != EAGAIN || errno != EWOULDBLOCK)) {
+	} else if (readCounter < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
 		printError("There was an error while receiving packets from the ritardatore\n");
 	}
 }
@@ -241,8 +241,11 @@ void sendPacket(Node *node){
 	pkt->id = htonl(pkt->id);
 	
 	/* Send the packet's body */
-	sentCounter = sendto(ritardatore, pkt, node->pktSize, 0, (struct sockaddr *)&toRit, sizeof(toRit));
-
+	do {
+		sentCounter = sendto(ritardatore, pkt, node->pktSize, 0, (struct sockaddr *)&toRit, sizeof(toRit));
+	
+	} while (sentCounter < 0 && (errno == EINTR || errno == EAGAIN));
+	
 	printf("[Call] sendPacket\n");
 
 	if (sentCounter < 0){

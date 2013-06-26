@@ -124,7 +124,7 @@ void terminate(){
 	time(&endTime);
 	/* Remove the timeout seconds if the connection has timed out */
 	if (timedOut){
-		endTime -= origTimeout.tv_sec;
+		endTime -= actualTimeout.tv_sec;
 	}
 	printf("Transfer complete!\nPackets received (size %d): %d | Time elapsed: %f\n", PAYLOAD_SIZE+HEADER_SIZE, lastSentId, difftime(endTime, startTime));
 	/* free(recvBuffer);
